@@ -25,7 +25,7 @@ def summgene(varb):
     print varb.shape
 
 
-def tran(indxvaluthis=None, strgvarbthis=None):
+def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
    
     '''
     Function to train the model
@@ -33,12 +33,12 @@ def tran(indxvaluthis=None, strgvarbthis=None):
     
     # list of values for the variable -- by default takes the central values defined in listvalu
     listvalutemp = {}
-    for o, strgvarb in enumerate(liststrgvarb):
-        listvalutemp[strgvarb] = listvalu[strgvarb][numbvalu[o]/2]
+    for o, strgvarb in enumerate(gdat.liststrgvarb):
+        listvalutemp[strgvarb] = gdat.listvalu[strgvarb][gdat.numbvalu[o]/2]
     
     if strgvarbthis != None:
         # for the variable of interest, strgvarbthis, take the relevant value indexed by indxvaluthis
-        listvalutemp[strgvarbthis] = listvalu[strgvarbthis][indxvaluthis]
+        listvalutemp[strgvarbthis] = gdat.listvalu[strgvarbthis][indxvaluthis]
     
     # number of time bins
     numbtime = listvalutemp['numbtime']
@@ -63,7 +63,7 @@ def tran(indxvaluthis=None, strgvarbthis=None):
     fracdropseco = listvalutemp['fracdropseco']
     
     # number of test data samples
-    numbdatatest = int(numbdata * fractest)
+    numbdatatest = int(numbdata * gdat.fractest)
     # number of training data samples
     numbdatatran = numbdata - numbdatatest
     # number of signal data samples
@@ -93,7 +93,7 @@ def tran(indxvaluthis=None, strgvarbthis=None):
     outp = outp[indxrand, :]
     
     # divide the data set into training and test data sets
-    numbdatatest = int(fractest * numbdata)
+    numbdatatest = int(gdat.fractest * numbdata)
     inpttest = inpt[:numbdatatest, :]
     outptest = outp[:numbdatatest, :]
     inpttran = inpt[numbdatatest:, :]
@@ -108,11 +108,11 @@ def tran(indxvaluthis=None, strgvarbthis=None):
     modl.add(Dense(1, activation='sigmoid'))
     modl.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
    
-    metr = np.empty((numbepoc, 2, 3))
-    for y in indxepoc:
-        hist = modl.fit(inpt, outp, epochs=1, batch_size=numbdatabtch, validation_split=fractest, verbose=2)
+    metr = np.empty((gdat.numbepoc, 2, 3))
+    for y in gdat.indxepoc:
+        hist = modl.fit(inpt, outp, epochs=1, batch_size=numbdatabtch, validation_split=gdat.fractest, verbose=0)
         
-        for r in indxrtyp:
+        for r in gdat.indxrtyp:
             if r == 0:
                 inpt = inpttran
                 outp = outptran
@@ -154,150 +154,179 @@ def tran(indxvaluthis=None, strgvarbthis=None):
             
     return metr
 
-# time stamp string
-strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
-# path where plots will be generated
-pathplot = os.environ['TDGU_DATA_PATH'] + '/nnet_ssupgadn/'
+class gdatstrt(object):
 
-# fraction of data samples that will be used to test the model
-fractest = 0.1
+    def __init__(self):
+        pass
 
-# number of epochs
-numbepoc = 30
 
-# number of runs for each configuration in order to determine the statistical uncertainty
-numbruns = 2
+def expl( \
+         # string indicating the model
+         strgtopo='fcon', \
+        ):
 
-indxepoc = np.arange(numbepoc)
-indxruns = np.arange(numbruns)
-
-# a dictionary to hold the variable values for which the training will be repeated
-listvalu = {}
-# relating to the data
-listvalu['numbtime'] = np.array([3e0, 1e1, 3e1, 1e2, 3e2]).astype(int)
-listvalu['dept'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-listvalu['nois'] = np.array([1e-3, 3e-3, 1e0, 3e-2, 1e-1])
-listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
-listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
-
-# hyperparameters
-listvalu['numbdatabtch'] = [32, 128, 512]
-listvalu['numbdimsfrst'] = [32, 64, 128]
-listvalu['numbdimsseco'] = [32, 64, 128]
-listvalu['fracdropfrst'] = [0.25, 0.5, 0.75]
-listvalu['fracdropseco'] = [0.25, 0.5, 0.75]
-
-# list of strings holding the names of the variables
-liststrgvarb = listvalu.keys()
-
-numbvarb = len(liststrgvarb) 
-indxvarb = np.arange(numbvarb)
-
-numbvalu = np.empty(numbvarb, dtype=int)
-indxvalu = [[] for o in indxvarb]
-for o, strgvarb in enumerate(liststrgvarb):
-    numbvalu[o] = len(listvalu[strgvarb])
-    indxvalu[o] = np.arange(numbvalu[o])
-
-# dictionary to hold the metrics resulting from the runs
-dictmetr = {}
-liststrgmetr = ['prec', 'accu', 'reca']
-listlablmetr = ['Precision', 'Accuracy', 'Recall']
-liststrgrtyp = ['vali', 'tran']
-listlablrtyp = ['Training', 'Validation']
-numbrtyp = len(liststrgrtyp)
-indxrtyp = np.arange(numbrtyp)
-
-for o, strgvarb in enumerate(liststrgvarb):
-    dictmetr[strgvarb] = np.empty((2, 3, numbruns, numbvalu[o]))
-
-# for each run
-for t in indxruns:
+    '''
+    Function to explore the effect of hyper-parameters (and data properties for mock data) on binary classification metrics
+    '''
     
-    # do the training for the central value
-    metr = tran()
+    # global object that will hold global variables
+    gdat = gdatstrt()
+
+    # time stamp string
+    strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     
-    # for each variable
-    for o, strgvarb in enumerate(liststrgvarb): 
+    # function that will do the training for the desired topology
+    functopo = globals().get(strgtopo)
+    
+    print 'CtC explorer initialized at %s.' % strgtimestmp
+    
+    # path where plots will be generated
+    pathplot = os.environ['TDGU_DATA_PATH'] + '/nnet_ssupgadn/'
+    
+    print 'Will generate plots in %s' % pathplot
+
+    # fraction of data samples that will be used to test the model
+    gdat.fractest = 0.1
+    
+    # number of epochs
+    gdat.numbepoc = 30
+    
+    # number of runs for each configuration in order to determine the statistical uncertainty
+    numbruns = 2
+    
+    gdat.indxepoc = np.arange(gdat.numbepoc)
+    indxruns = np.arange(numbruns)
+    
+    # a dictionary to hold the variable values for which the training will be repeated
+    gdat.listvalu = {}
+    # relating to the data
+    gdat.listvalu['numbtime'] = np.array([3e0, 1e1, 3e1, 1e2, 3e2]).astype(int)
+    gdat.listvalu['dept'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
+    gdat.listvalu['nois'] = np.array([1e-3, 3e-3, 1e0, 3e-2, 1e-1])
+    gdat.listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
+    gdat.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
+    
+    # hyperparameters
+    gdat.listvalu['numbdatabtch'] = [32, 128, 512]
+    gdat.listvalu['numbdimsfrst'] = [32, 64, 128]
+    gdat.listvalu['numbdimsseco'] = [32, 64, 128]
+    gdat.listvalu['fracdropfrst'] = [0.25, 0.5, 0.75]
+    gdat.listvalu['fracdropseco'] = [0.25, 0.5, 0.75]
+    
+    # list of strings holding the names of the variables
+    gdat.liststrgvarb = gdat.listvalu.keys()
+    
+    numbvarb = len(gdat.liststrgvarb) 
+    indxvarb = np.arange(numbvarb)
+    
+    gdat.numbvalu = np.empty(numbvarb, dtype=int)
+    indxvalu = [[] for o in indxvarb]
+    for o, strgvarb in enumerate(gdat.liststrgvarb):
+        gdat.numbvalu[o] = len(gdat.listvalu[strgvarb])
+        indxvalu[o] = np.arange(gdat.numbvalu[o])
+    
+    # dictionary to hold the metrics resulting from the runs
+    dictmetr = {}
+    liststrgmetr = ['prec', 'accu', 'reca']
+    listlablmetr = ['Precision', 'Accuracy', 'Recall']
+    liststrgrtyp = ['vali', 'tran']
+    listlablrtyp = ['Training', 'Validation']
+    numbrtyp = len(liststrgrtyp)
+    gdat.indxrtyp = np.arange(numbrtyp)
+    
+    for o, strgvarb in enumerate(gdat.liststrgvarb):
+        dictmetr[strgvarb] = np.empty((2, 3, numbruns, gdat.numbvalu[o]))
+    
+    # for each run
+    for t in indxruns:
         
-        # for each value
-        for i in indxvalu[o]:
-           
-            # do the training for the specific value of the variable of interest
-            metr = tran(i, strgvarb)
+        print 'Run index %d' % t
+        # do the training for the central value
+        #metr = functopo(gdat)
+        
+        # for each variable
+        for o, strgvarb in enumerate(gdat.liststrgvarb): 
             
-            dictmetr[strgvarb][0, 0, t, i] = metr[-1, 0, 0]
-            dictmetr[strgvarb][1, 0, t, i] = metr[-1, 1, 0]
-            dictmetr[strgvarb][0, 1, t, i] = metr[-1, 0, 1]
-            dictmetr[strgvarb][1, 1, t, i] = metr[-1, 1, 1]
-            dictmetr[strgvarb][0, 2, t, i] = metr[-1, 0, 2]
-            dictmetr[strgvarb][1, 2, t, i] = metr[-1, 1, 2]
+            print 'Processing variable %s...' % strgvarb
 
-# plot the resulting metrics
-for o, strgvarb in enumerate(liststrgvarb): 
-    for l, strgmetr in enumerate(liststrgmetr):
-        figr, axis = plt.subplots()
-        
-        for r in indxrtyp:
-            ydat = np.mean(dictmetr[strgvarb][r, l, :, :], axis=0)
-            yerr = np.empty((2, numbvalu[o]))
-            if r == 0:
-                alph = 0.5
-            else:
-                alph = 1.
-
+            # for each value
             for i in indxvalu[o]:
-                yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, :, i], 5.)
-                yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
+              
+                # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
+                # do the training for the specific value of the variable of interest
+                metr = functopo(gdat, i, strgvarb)
+                
+                dictmetr[strgvarb][0, 0, t, i] = metr[-1, 0, 0]
+                dictmetr[strgvarb][1, 0, t, i] = metr[-1, 1, 0]
+                dictmetr[strgvarb][0, 1, t, i] = metr[-1, 0, 1]
+                dictmetr[strgvarb][1, 1, t, i] = metr[-1, 1, 1]
+                dictmetr[strgvarb][0, 2, t, i] = metr[-1, 0, 2]
+                dictmetr[strgvarb][1, 2, t, i] = metr[-1, 1, 2]
+    
+    # plot the resulting metrics
+    for o, strgvarb in enumerate(gdat.liststrgvarb): 
+        for l, strgmetr in enumerate(liststrgmetr):
+            figr, axis = plt.subplots()
             
-            if r == 0:
-                linestyl = '--'
-            else:
-                linestyl = ''
-            temp, listcaps, temp = axis.errorbar(listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', ls='', markersize=10, lw=3, alpha=alph)
-            for caps in listcaps:
-                caps.set_markeredgewidth(3)
-        
-        if strgvarb == 'numbtime':
-            labl = '$N_{time}$'
-        
-        if strgvarb == 'dept':
-            labl = '$\delta$'
-        
-        if strgvarb == 'nois':
-            labl = '$\sigma$'
-        
-        if strgvarb == 'numbdata':
-            labl = '$N_{data}$'
-        
-        if strgvarb == 'fracplan':
-            labl = '$f_{p}$'
-        
-        if strgvarb == 'numbdatabtch':
-            labl = '$N_{db}$'
+            for r in gdat.indxrtyp:
+                ydat = np.mean(dictmetr[strgvarb][r, l, :, :], axis=0)
+                yerr = np.empty((2, gdat.numbvalu[o]))
+                if r == 0:
+                    alph = 0.5
+                else:
+                    alph = 1.
     
-        if strgvarb == 'numbdimsfrst':
-            labl = '$N_{dens,1}$'
+                for i in indxvalu[o]:
+                    yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, :, i], 5.)
+                    yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
+                
+                if r == 0:
+                    linestyl = '--'
+                else:
+                    linestyl = ''
+                temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', ls='', markersize=10, lw=3, alpha=alph)
+                for caps in listcaps:
+                    caps.set_markeredgewidth(3)
+            
+            if strgvarb == 'numbtime':
+                labl = '$N_{time}$'
+            
+            if strgvarb == 'dept':
+                labl = '$\delta$'
+            
+            if strgvarb == 'nois':
+                labl = '$\sigma$'
+            
+            if strgvarb == 'numbdata':
+                labl = '$N_{data}$'
+            
+            if strgvarb == 'fracplan':
+                labl = '$f_{p}$'
+            
+            if strgvarb == 'numbdatabtch':
+                labl = '$N_{db}$'
         
-        if strgvarb == 'numbdimsseco':
-            labl = '$N_{dens,2}$'
-    
-        if strgvarb == 'fracdropfrst':
-            labl = '$f_{d,1}$'
-    
-        if strgvarb == 'fracdropseco':
-            labl = '$f_{d,2}$'
-    
-        axis.set_ylabel(listlablmetr[l]) 
-        axis.set_xlabel(labl) 
+            if strgvarb == 'numbdimsfrst':
+                labl = '$N_{dens,1}$'
+            
+            if strgvarb == 'numbdimsseco':
+                labl = '$N_{dens,2}$'
         
-        if strgvarb == 'numbdata' or strgvarb == 'numbtime' or strgvarb == 'dept' or strgvarb == 'nois':
-            axis.set_xscale('log')
-        plt.legend()
-        plt.tight_layout()
-        path = pathplot + strgvarb + strgmetr + '_' + strgtimestmp + '.pdf' 
-        plt.savefig(path)
-        plt.close()
-
-
+            if strgvarb == 'fracdropfrst':
+                labl = '$f_{d,1}$'
+        
+            if strgvarb == 'fracdropseco':
+                labl = '$f_{d,2}$'
+        
+            axis.set_ylabel(listlablmetr[l]) 
+            axis.set_xlabel(labl) 
+            
+            if strgvarb == 'numbdata' or strgvarb == 'numbtime' or strgvarb == 'dept' or strgvarb == 'nois':
+                axis.set_xscale('log')
+            plt.legend()
+            plt.tight_layout()
+            path = pathplot + strgvarb + strgmetr + '_' + strgtimestmp + '.pdf' 
+            plt.savefig(path)
+            plt.close()
+    
