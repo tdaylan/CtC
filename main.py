@@ -108,9 +108,22 @@ def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
     modl.add(Dense(1, activation='sigmoid'))
     modl.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
    
-    metr = np.empty((gdat.numbepoc, 2, 3))
+    metr = np.zeros((gdat.numbepoc, 2, 3)) - 1.
+    loss = np.empty(gdat.numbepoc)
+    numbepocchec = 5
     for y in gdat.indxepoc:
         hist = modl.fit(inpt, outp, epochs=1, batch_size=numbdatabtch, validation_split=gdat.fractest, verbose=0)
+        loss[y] = hist.history['loss'][0]
+        indxepocloww = max(0, y - numbepocchec)
+        if y == gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]) / loss[y] > 1.:
+            print 'Warning! The optimizer may not have converged.'
+            print 'loss[indxepocloww]'
+            print loss[indxepocloww]
+            print 'loss[y]'
+            print loss[y]
+            print 'loss'
+            print loss
+            #raise Exception('')
         
         for r in gdat.indxrtyp:
             if r == 0:
@@ -148,10 +161,17 @@ def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
             trpo = matrconf[1, 1]
             
             # calculate the metrics
-            metr[y, r, 0] = trpo / float(trpo + flpo)
+            if float(trpo + flpo) > 0:
+                metr[y, r, 0] = trpo / float(trpo + flpo)
             metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
-            metr[y, r, 2] = trpo / float(trpo + flne)
+            if float(trpo + flne) > 0:
+                metr[y, r, 2] = trpo / float(trpo + flne)
             
+            print 'metr[y, r, :]'
+            print metr[y, r, :]
+            print
+
+
     return metr
 
 
@@ -190,7 +210,7 @@ def expl( \
     gdat.fractest = 0.1
     
     # number of epochs
-    gdat.numbepoc = 30
+    gdat.numbepoc = 50
     
     # number of runs for each configuration in order to determine the statistical uncertainty
     numbruns = 2
@@ -198,12 +218,18 @@ def expl( \
     gdat.indxepoc = np.arange(gdat.numbepoc)
     indxruns = np.arange(numbruns)
     
+    from tensorflow.python.client import device_lib
+    listdictdevi = device_lib.list_local_devices()
+    print 'Names of the devices detected: '
+    for dictdevi in listdictdevi:
+        print dictdevi.name
+
     # a dictionary to hold the variable values for which the training will be repeated
     gdat.listvalu = {}
     # relating to the data
     gdat.listvalu['numbtime'] = np.array([3e0, 1e1, 3e1, 1e2, 3e2]).astype(int)
-    gdat.listvalu['dept'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-    gdat.listvalu['nois'] = np.array([1e-3, 3e-3, 1e0, 3e-2, 1e-1])
+    gdat.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
+    gdat.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
     gdat.listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
     gdat.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
     
@@ -264,6 +290,7 @@ def expl( \
                 dictmetr[strgvarb][0, 2, t, i] = metr[-1, 0, 2]
                 dictmetr[strgvarb][1, 2, t, i] = metr[-1, 1, 2]
     
+    alph = 0.5
     # plot the resulting metrics
     for o, strgvarb in enumerate(gdat.liststrgvarb): 
         for l, strgmetr in enumerate(liststrgmetr):
@@ -273,22 +300,30 @@ def expl( \
                 ydat = np.mean(dictmetr[strgvarb][r, l, :, :], axis=0)
                 yerr = np.empty((2, gdat.numbvalu[o]))
                 if r == 0:
-                    alph = 0.5
+                    colr = 'b'
                 else:
-                    alph = 1.
-    
-                for i in indxvalu[o]:
-                    yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, :, i], 5.)
-                    yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
+                    colr = 'g'
                 
-                if r == 0:
-                    linestyl = '--'
-                else:
-                    linestyl = ''
-                temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', ls='', markersize=10, lw=3, alpha=alph)
-                for caps in listcaps:
-                    caps.set_markeredgewidth(3)
+                indx = np.where(dictmetr[strgvarb][r, l, :, i] != -1)[0]
+                if indx.size > 0:
+                    for i in indxvalu[o]:
+                        yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, indx, i], 5.)
+                        yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
+                
+                    if r == 0:
+                        linestyl = '--'
+                    else:
+                        linestyl = ''
+                    temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', \
+                                                                                        ls='', markersize=10, lw=3, alpha=alph, color=colr)
+                    for caps in listcaps:
+                        caps.set_markeredgewidth(3)
             
+                for t in indxruns:
+                    axis.plot(gdat.listvalu[strgvarb], dictmetr[strgvarb][r, l, t, :], marker='D', ls='', markersize=5, alpha=alph, color=colr)
+            
+            axis.set_ylim([0., 1.])
+
             if strgvarb == 'numbtime':
                 labl = '$N_{time}$'
             
@@ -322,7 +357,7 @@ def expl( \
             axis.set_ylabel(listlablmetr[l]) 
             axis.set_xlabel(labl) 
             
-            if strgvarb == 'numbdata' or strgvarb == 'numbtime' or strgvarb == 'dept' or strgvarb == 'nois':
+            if strgvarb in ['numbdata', 'numbtime', 'dept', 'nois', 'numbdimsfrst', 'numbdimsseco', 'numbdatabtch']:
                 axis.set_xscale('log')
             plt.legend()
             plt.tight_layout()
