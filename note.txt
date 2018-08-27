@@ -1,0 +1,38 @@
+# Guidelines for contributing to the repository. Please, let's try to:
+## write comments at the top of reasonably-sized chuncks of your code
+## commit your work frequently
+    ### allows faster communication among contributors to the code
+    ### reduces the chances of losing work in the local repository
+## maintain the namespace conventions
+## add a comment that starts with '# temp -- ', when you are making a temporary change to the code, or hacking it just to try something for a moment. This makes it easy to notice or search hacky, temporary or extraordinary changes to the repository.
+## avoid uncommented parameter values in arbitrary locations in the code. Try to define parameter values together at the top your code and comment them.
+## not repeat code. If you need to do the same operation in multiple points, make your code a function and call it multiple times.
+## maintain separate branches for major tasks, which will then be merged into the master branch
+
+
+# Useful links
+## TCE labels
+## http://exoplanetarchive.ipac.caltech.edu/
+
+## Lightcurve data
+## http://archive.stsci.edu/
+
+## Baseline paper
+## https://arxiv.org/pdf/1712.05044.pdf
+
+
+# to-do-list
+## implement a simple 1D CNN on 
+## implement a 2 channel 1D CNN with FC layers
+## get Kepler data from MAST
+## Ensure the above nets perform well
+## Channel off to individual projects
+
+# diagnostic plots to produce
+## animation showing samples from the training data samples
+## a Probabilistic Graphical Model (PGM) of your neural network
+## 2D projection of the feature space representation of the training data samples (e.g. via t-SNE)
+## AUC, i.e., recall vs precision for a grid of classification thresholds
+
+
+

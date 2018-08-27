@@ -167,11 +167,6 @@ def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
             if float(trpo + flne) > 0:
                 metr[y, r, 2] = trpo / float(trpo + flne)
             
-            print 'metr[y, r, :]'
-            print metr[y, r, :]
-            print
-
-
     return metr
 
 
