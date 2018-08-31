@@ -3,7 +3,7 @@ import numpy as np
 import datetime, os
 
 from keras.models import Sequential
-from keras.layers import Dense, Dropout
+from keras.layers import Dense, Dropout, Conv1D
 import tensorflow as tf
 
 import sklearn
@@ -19,10 +19,10 @@ def summgene(varb):
     convenience function to quickly print a numpy array
     '''
     
-    print np.amin(varb)
-    print np.amax(varb)
-    print np.mean(varb)
-    print varb.shape
+    print (np.amin(varb))
+    print (np.amax(varb))
+    print (np.mean(varb))
+    print (varb.shape)
 
 
 def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
@@ -41,7 +41,7 @@ def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
         listvalutemp[strgvarbthis] = gdat.listvalu[strgvarbthis][indxvaluthis]
     
     # number of time bins
-    numbtime = listvalutemp['numbtime']
+    numbtime = listvalutemp['numbtime']  
     # transit depth
     dept = listvalutemp['dept']
     # standard deviation of noise
@@ -116,13 +116,13 @@ def fcon(gdat, indxvaluthis=None, strgvarbthis=None):
         loss[y] = hist.history['loss'][0]
         indxepocloww = max(0, y - numbepocchec)
         if y == gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]) / loss[y] > 1.:
-            print 'Warning! The optimizer may not have converged.'
-            print 'loss[indxepocloww]'
-            print loss[indxepocloww]
-            print 'loss[y]'
-            print loss[y]
-            print 'loss'
-            print loss
+            print ('Warning! The optimizer may not have converged.')
+            print ('loss[indxepocloww]')
+            print (loss[indxepocloww])
+            print ('loss[y]')
+            print (loss[y])
+            print ('loss')
+            print (loss)
             #raise Exception('')
         
         for r in gdat.indxrtyp:
@@ -179,6 +179,7 @@ class gdatstrt(object):
 def expl( \
          # string indicating the model
          strgtopo='fcon', \
+         zoomtype='locl' # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
         ):
 
     '''
@@ -194,12 +195,14 @@ def expl( \
     # function that will do the training for the desired topology
     functopo = globals().get(strgtopo)
     
-    print 'CtC explorer initialized at %s.' % strgtimestmp
+    print ('CtC explorer initialized at %s.' % strgtimestmp)
     
     # path where plots will be generated
     pathplot = os.environ['TDGU_DATA_PATH'] + '/nnet_ssupgadn/'
     
-    print 'Will generate plots in %s' % pathplot
+    print ('Will generate plots in %s' % pathplot)
+
+    # these variables are hard coded in, do we want that? probably no, make variables
 
     # fraction of data samples that will be used to test the model
     gdat.fractest = 0.1
@@ -210,14 +213,16 @@ def expl( \
     # number of runs for each configuration in order to determine the statistical uncertainty
     numbruns = 2
     
+    # end of hard-coded vars to fix
+
     gdat.indxepoc = np.arange(gdat.numbepoc)
     indxruns = np.arange(numbruns)
     
-    from tensorflow.python.client import device_lib
+    """"from tensorflow.python.client import device_lib
     listdictdevi = device_lib.list_local_devices()
-    print 'Names of the devices detected: '
+    print ('Names of the devices detected: ')
     for dictdevi in listdictdevi:
-        print dictdevi.name
+        print (dictdevi.name)"""
 
     # a dictionary to hold the variable values for which the training will be repeated
     gdat.listvalu = {}
@@ -262,14 +267,14 @@ def expl( \
     # for each run
     for t in indxruns:
         
-        print 'Run index %d' % t
+        print ('Run index %d' % t)
         # do the training for the central value
         #metr = functopo(gdat)
         
         # for each variable
         for o, strgvarb in enumerate(gdat.liststrgvarb): 
             
-            print 'Processing variable %s...' % strgvarb
+            print ('Processing variable %s...' % strgvarb)
 
             # for each value
             for i in indxvalu[o]:
@@ -289,7 +294,7 @@ def expl( \
     # plot the resulting metrics
     for o, strgvarb in enumerate(gdat.liststrgvarb): 
         for l, strgmetr in enumerate(liststrgmetr):
-            figr, axis = plt.subplots()
+            figr, axis = plt.subplots() # figr unused
             
             for r in gdat.indxrtyp:
                 ydat = np.mean(dictmetr[strgvarb][r, l, :, :], axis=0)
@@ -306,7 +311,7 @@ def expl( \
                         yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
                 
                     if r == 0:
-                        linestyl = '--'
+                        linestyl = '--' # unused
                     else:
                         linestyl = ''
                     temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', \
@@ -323,10 +328,10 @@ def expl( \
                 labl = '$N_{time}$'
             
             if strgvarb == 'dept':
-                labl = '$\delta$'
+                labl = r'$\delta$' # pylint told me that these needed an r prefix
             
             if strgvarb == 'nois':
-                labl = '$\sigma$'
+                labl = r'$\sigma$' # pylint told me that these needed an r prefix
             
             if strgvarb == 'numbdata':
                 labl = '$N_{data}$'
@@ -360,3 +365,4 @@ def expl( \
             plt.savefig(path)
             plt.close()
     
+expl()
