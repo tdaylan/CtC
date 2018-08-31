@@ -292,27 +292,31 @@ def expl( \
             figr, axis = plt.subplots()
             
             for r in gdat.indxrtyp:
-                ydat = np.mean(dictmetr[strgvarb][r, l, :, :], axis=0)
                 yerr = np.empty((2, gdat.numbvalu[o]))
                 if r == 0:
                     colr = 'b'
                 else:
                     colr = 'g'
                 
-                indx = np.where(dictmetr[strgvarb][r, l, :, i] != -1)[0]
+                indx = []
+                ydat = np.empty(numbvalu[o])
+                for i in indxvalu[o]:
+                    indx.append(np.where(dictmetr[strgvarb][r, l, :, i] != -1)[0])
+                    ydat[i] = np.mean(dictmetr[strgvarb][r, l, :, indx[i]], axis=0)
                 if indx.size > 0:
                     for i in indxvalu[o]:
-                        yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, indx, i], 5.)
+                        yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, indx[i], i], 5.)
                         yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
                 
                     if r == 0:
                         linestyl = '--'
                     else:
                         linestyl = ''
-                    temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', \
-                                                                                        ls='', markersize=10, lw=3, alpha=alph, color=colr)
-                    for caps in listcaps:
-                        caps.set_markeredgewidth(3)
+                
+                temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=listlablrtyp[r], capsize=10, marker='o', \
+                                                                                    ls='', markersize=10, lw=3, alpha=alph, color=colr)
+                for caps in listcaps:
+                    caps.set_markeredgewidth(3)
             
                 for t in indxruns:
                     axis.plot(gdat.listvalu[strgvarb], dictmetr[strgvarb][r, l, t, :], marker='D', ls='', markersize=5, alpha=alph, color=colr)
