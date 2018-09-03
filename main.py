@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(context='poster', style='ticks', color_codes=True)
 
+from gdatFile import gdatstrt
+from genNet import nets
+
 def summgene(varb):
     '''
     convenience function to quickly print a numpy array
@@ -202,8 +205,6 @@ def expl( \
     
     print ('Will generate plots in %s' % pathplot)
 
-    # these variables are hard coded in, do we want that? probably no, make variables
-
     # fraction of data samples that will be used to test the model
     gdat.fractest = 0.1
     
@@ -212,8 +213,6 @@ def expl( \
     
     # number of runs for each configuration in order to determine the statistical uncertainty
     numbruns = 2
-    
-    # end of hard-coded vars to fix
 
     gdat.indxepoc = np.arange(gdat.numbepoc)
     indxruns = np.arange(numbruns)
