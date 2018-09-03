@@ -222,7 +222,7 @@ def expl( \
     listdictdevi = device_lib.list_local_devices()
     print ('Names of the devices detected: ')
     for dictdevi in listdictdevi:
-        print (dictdevi.name)"""
+        print (dictdevi.name)""" # Jeremy has this commented out because his computer doesn't recognize it
 
     # a dictionary to hold the variable values for which the training will be repeated
     gdat.listvalu = {}
@@ -304,11 +304,11 @@ def expl( \
                     colr = 'g'
                 
                 indx = []
-                ydat = np.empty(numbvalu[o])
+                ydat = np.empty(gdat.numbvalu[o])
                 for i in indxvalu[o]:
                     indx.append(np.where(dictmetr[strgvarb][r, l, :, i] != -1)[0])
                     ydat[i] = np.mean(dictmetr[strgvarb][r, l, :, indx[i]], axis=0)
-                if indx.size > 0:
+                if len(indx) > 0:
                     for i in indxvalu[o]:
                         yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, indx[i], i], 5.)
                         yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
