@@ -166,3 +166,13 @@ class nets():
                 if float(trpo + flne) > 0:
                     metr[y, r, 2] = trpo / float(trpo + flne)
             return metr
+
+
+class anet(nets):
+    def add_dnse(self):
+        pass
+    
+    def add_conv1D(self):
+        pass
+    
+    
