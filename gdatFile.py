@@ -125,15 +125,20 @@ class gdatstrt(object):
         if whchLayr:
             # check to see if this is the last layer, if not, see how many layers precede this next layer
             whchLayr = len(self.modl.layers)
+
         if whchLayr == 0:
             # if first layer:
             self.modl.add(Dense(self.numbdimsfrst, input_dim=self.numbtime, activation='relu'))
+            
             if drop:
                 self.modl.add(Dropout(self.fracdropfrst))
+
         elif whchLayr > 0:
             self.modl.add(Dense(self.numbdimsseco, activation= 'relu'))
+            
             if drop:
                 self.modl.add(Dropout(self.fracdropseco))
+
         elif whchLayr == 'Last':
             self.modl.add(Dense(1, activation='sigmoid'))
 
@@ -143,19 +148,24 @@ class gdatstrt(object):
 
         drop: True if Dropout is desired in the model
         whchLayr: True unless last layer, at which point this var needs to be set to 'Last'
+        This should not be the last layer!
         """
         if whchLayr:
             # check to see if this is the last layer, if not, see how many layers precede this next layer
             whchLayr = len(self.modl.layers)
         if whchLayr == 0:
             # if first layer:
-            self.modl.add(Dense(self.numbdimsfrst, input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Conv1D(self.numbdimsfrst, kernel_size=self.numbtime, activation='relu')) # should look into these inputs
+            
             if drop:
                 self.modl.add(Dropout(self.fracdropfrst))
+
         elif whchLayr > 0:
-            self.modl.add(Dense(self.numbdimsseco, activation= 'relu'))
+            self.modl.add(Conv1D(self.numbdimsseco, kernel_size=self.numbtime activation= 'relu')) # should look into these inputs
+            
             if drop:
                 self.modl.add(Dropout(self.fracdropseco))
+
         elif whchLayr == 'Last':
             self.modl.add(Dense(1, activation='sigmoid'))
         return None
