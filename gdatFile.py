@@ -166,11 +166,15 @@ class gdatstrt(object):
             if drop:
                 self.modl.add(Dropout(self.fracdropseco))
 
-        elif whchLayr == 'Last':
-            self.modl.add(Dense(1, activation='sigmoid'))
         return None
 
-    def get_metr(self, indxvaluthis=None, strgvarbthis=None):
+    def get_metr(self, indxvaluthis=None, strgvarbthis=None):     
+        """
+        Performance method
+        """
+
+        self.modl.compile()
+
         # empt dict
         listvalutemp = {}
         # store with the vars we iterate over
@@ -179,4 +183,46 @@ class gdatstrt(object):
         
         # catch that input and set another val in the dict
         if strgvarbthis != None:
-            listvalutemp[strgvarbthis] = self.listvalu[strgvarbthis][indxvaluthis]        
+            listvalutemp[strgvarbthis] = self.listvalu[strgvarbthis][indxvaluthis]   
+
+        metr = np.zeros((self.numbepoc, 2, 3)) - 1
+        loss = np.empty(self.numbepoc)
+        numbepocchec = 5 # hard coded
+        
+
+        for y in self.inxepoc:
+            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=0)
+            loss[y] = hist.history['loss'][0]
+            indxepocloww = max(0, y- numbepocchec)
+            if y == self.gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
+                print('Warning! The optimizer may not have converged.')
+                print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
+
+            for r in self.gdat.inxrtyp:
+                if r==0:
+                    inpt = self.inpttran
+                    outp = self.outptran
+                    numdatatemp = self.numbdatatran
+                else:
+                    inpt = self.inpttest
+                    outp = self.outptest
+                    numbdatatemp = self.numbdatatest
+
+                outppred = (self.modl.predict(inpt) > 0.5).astype(int)
+                score = self.modl.evaluate(inpt,outp, verpose=0)
+                matrconf = confusion_matrix(outp[:, 0], outppred[:, 0])
+
+
+
+                trne = matrconf[0, 0]
+                flpo = matrconf[0, 1]
+                flne = matrconf[1, 0]
+                trpo = matrconf[1, 1]
+
+
+                if float(trpo + flpo) > 0:
+                    metr[y, r, 0] = trpo / float(trpo + flpo)
+                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
+                if float(trpo + flne) > 0:
+                    metr[y, r, 2] = trpo / float(trpo + flne)
+            return metr
