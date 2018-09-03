@@ -5,7 +5,10 @@ import tensorflow as tf
 
 class gdatstrt(object):
     """
-    Initializes all the testing data
+    init: Initializes all the testing data -- has all variables needed for testing
+    addFcon: add a fully connected layer
+    addConv_1D: add a 1D convolutional layer
+    get_metr: returns all metrics of the network
     """
     def __init__(self):
         # fraction of data samples that will be used to test the model
