@@ -178,8 +178,10 @@ class gdatstrt(object):
 
 def expl( \
          # string indicating the model
+         strguser='tansu', \
          strgtopo='fcon', \
          zoomtype='locl' # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
+         datatype='here', \
         ):
 
     '''
@@ -208,7 +210,7 @@ def expl( \
     gdat.fractest = 0.1
     
     # number of epochs
-    gdat.numbepoc = 50
+    gdat.numbepoc = 2
     
     # number of runs for each configuration in order to determine the statistical uncertainty
     numbruns = 2
@@ -218,11 +220,13 @@ def expl( \
     gdat.indxepoc = np.arange(gdat.numbepoc)
     indxruns = np.arange(numbruns)
     
-    """"from tensorflow.python.client import device_lib
+    """"
+    from tensorflow.python.client import device_lib
     listdictdevi = device_lib.list_local_devices()
     print ('Names of the devices detected: ')
     for dictdevi in listdictdevi:
-        print (dictdevi.name)"""
+        print (dictdevi.name)
+    """
 
     # a dictionary to hold the variable values for which the training will be repeated
     gdat.listvalu = {}
@@ -247,10 +251,10 @@ def expl( \
     indxvarb = np.arange(numbvarb)
     
     gdat.numbvalu = np.empty(numbvarb, dtype=int)
-    indxvalu = [[] for o in indxvarb]
+    gdat.indxvalu = [[] for o in indxvarb]
     for o, strgvarb in enumerate(gdat.liststrgvarb):
         gdat.numbvalu[o] = len(gdat.listvalu[strgvarb])
-        indxvalu[o] = np.arange(gdat.numbvalu[o])
+        gdat.indxvalu[o] = np.arange(gdat.numbvalu[o])
     
     # dictionary to hold the metrics resulting from the runs
     dictmetr = {}
@@ -277,7 +281,7 @@ def expl( \
             print ('Processing variable %s...' % strgvarb)
 
             # for each value
-            for i in indxvalu[o]:
+            for i in gdat.indxvalu[o]:
               
                 # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                 # do the training for the specific value of the variable of interest
@@ -304,12 +308,12 @@ def expl( \
                     colr = 'g'
                 
                 indx = []
-                ydat = np.empty(numbvalu[o])
-                for i in indxvalu[o]:
+                ydat = np.empty(gdat.numbvalu[o])
+                for i in gdat.indxvalu[o]:
                     indx.append(np.where(dictmetr[strgvarb][r, l, :, i] != -1)[0])
                     ydat[i] = np.mean(dictmetr[strgvarb][r, l, :, indx[i]], axis=0)
                 if indx.size > 0:
-                    for i in indxvalu[o]:
+                    for i in gdat.indxvalu[o]:
                         yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, indx[i], i], 5.)
                         yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
                 
@@ -369,4 +373,10 @@ def expl( \
             plt.savefig(path)
             plt.close()
     
-expl()
+
+def cnfg_tansu():
+    
+    expl( \
+         datatype='ete6', \
+        )
+

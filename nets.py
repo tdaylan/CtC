@@ -61,23 +61,29 @@ class nets():
         # number of signal data samples
         numbdataplan = int(numbdata * fracplan)
         
-        # generate (background-only) light curves
-        # temp -- this currently does not use the repository 'exop'
-        inpt = nois * np.random.randn(numbdata * numbtime).reshape((numbdata, numbtime)) + 1.
-        # set the label of all to 0 (background)
-        outp = np.zeros((numbdata, 1))
-        
-        # time indices of the transit 
-        ## beginning
-        indxinit = int(0.45 * numbtime)
-        ## end
-        indxfinl = int(0.55 * numbtime)
+        if gdat.datatype == 'here':  
+            
+            # generate (background-only) light curves
+            # temp -- this currently does not use the repository 'exop'
+            inpt = nois * np.random.randn(numbdata * numbtime).reshape((numbdata, numbtime)) + 1.
+            # set the label of all to 0 (background)
+            outp = np.zeros((numbdata, 1))
+            
+            # time indices of the transit 
+            ## beginning
+            indxinit = int(0.45 * numbtime)
+            ## end
+            indxfinl = int(0.55 * numbtime)
     
-        # lower the relevant time bins by the transit depth
-        inpt[:numbdataplan, indxinit:indxfinl] *= dept
-        # change the labels of these data samples to 1 (signal)
-        outp[:numbdataplan, 0] = 1.
+            # lower the relevant time bins by the transit depth
+            inpt[:numbdataplan, indxinit:indxfinl] *= dept
+            # change the labels of these data samples to 1 (signal)
+            outp[:numbdataplan, 0] = 1.
         
+        if gdat.datatype == 'ete6':  
+            
+            exop.main.retr_ete6()
+
         # randomize the data set
         indxdata = np.arange(numbdata)
         indxrand = np.random.choice(indxdata, size=numbdata, replace=False)
@@ -128,13 +134,10 @@ class nets():
                 score = modl.evaluate(inpt,outp, verpose=0)
                 matrconf = confusion_matrix(outp[:, 0], outppred[:, 0])
 
-
-
                 trne = matrconf[0, 0]
                 flpo = matrconf[0, 1]
                 flne = matrconf[1, 0]
                 trpo = matrconf[1, 1]
-
 
                 if float(trpo + flpo) > 0:
                     metr[y, r, 0] = trpo / float(trpo + flpo)
@@ -143,6 +146,7 @@ class nets():
                     metr[y, r, 2] = trpo / float(trpo + flne)
             return metr
 
+    
     def Cnn1D(self):
         modl = Sequential()
         modl.add(Conv1D(self.numbdimsfrst, input_dim=self.numbtime, activation='relu'))
