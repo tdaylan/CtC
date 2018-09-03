@@ -1,14 +1,4 @@
 import numpy as np
-import datetime, os
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Conv1D
-import tensorflow as tf
-import sklearn
-from sklearn.metrics import confusion_matrix
-import matplotlib
-import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set(context='poster', style='ticks', color_codes=True)
 
 class gdatstrt(object):
 
