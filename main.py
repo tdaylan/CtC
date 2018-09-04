@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(context='poster', style='ticks', color_codes=True)
 
+from gdatFile import gdatstrt
+from genNet import nets
+
 def summgene(varb):
     '''
     convenience function to quickly print a numpy array
@@ -204,8 +207,6 @@ def expl( \
     
     print ('Will generate plots in %s' % pathplot)
 
-    # these variables are hard coded in, do we want that? probably no, make variables
-
     # fraction of data samples that will be used to test the model
     gdat.fractest = 0.1
     
@@ -214,13 +215,12 @@ def expl( \
     
     # number of runs for each configuration in order to determine the statistical uncertainty
     numbruns = 2
-    
-    # end of hard-coded vars to fix
 
     gdat.indxepoc = np.arange(gdat.numbepoc)
     indxruns = np.arange(numbruns)
     
     """"
+    # detect names of devices, disabled for the moment
     from tensorflow.python.client import device_lib
     listdictdevi = device_lib.list_local_devices()
     print ('Names of the devices detected: ')
@@ -309,11 +309,11 @@ def expl( \
                 
                 indx = []
                 ydat = np.empty(gdat.numbvalu[o])
-                for i in gdat.indxvalu[o]:
+                for i in indxvalu[o]:
                     indx.append(np.where(dictmetr[strgvarb][r, l, :, i] != -1)[0])
                     ydat[i] = np.mean(dictmetr[strgvarb][r, l, :, indx[i]], axis=0)
-                if indx.size > 0:
-                    for i in gdat.indxvalu[o]:
+                if len(indx) > 0:
+                    for i in indxvalu[o]:
                         yerr[0, i] = ydat[i] - np.percentile(dictmetr[strgvarb][r, l, indx[i], i], 5.)
                         yerr[1, i] = np.percentile(dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
                 
