@@ -164,7 +164,7 @@ class gdatstrt(object):
                 self.modl.add(Dropout(self.fracdropfrst))
 
         elif whchLayr > 0:
-            self.modl.add(Conv1D(self.numbdimsseco, kernel_size=self.numbtime activation= 'relu')) # should look into these inputs
+            self.modl.add(Conv1D(self.numbdimsseco, kernel_size=self.numbtime,  activation= 'relu')) # should look into these inputs
             
             if drop:
                 self.modl.add(Dropout(self.fracdropseco))

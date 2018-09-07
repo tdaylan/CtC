@@ -22,7 +22,7 @@ class nets():
         self.gdat = gdat
         listvalutemp = {}
         for o, strgvarb in enumerate(gdat.liststrgvarb):
-            listvalutemp[strgvarb] = gdat.listvalu[strgvarb][gdat.numbvalu[o]/2]
+            listvalutemp[strgvarb] = gdat.listvalu[strgvarb][int(gdat.numbvalu[o]/2)]
 
         if strgvarbthis != None:
             listvalutemp[strgvarbthis] = gdat.listvalu[strgvarbthis][indxvaluthis]
