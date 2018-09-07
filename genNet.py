@@ -155,9 +155,9 @@ class nets():
         Initialize Convolutional 1D Neural Network model
         """
         modl = Sequential()
-        modl.add(Conv1D(self.numbdimsfrst, self.numbdimsfrst input_shape=(self.numbdimsfrst[1], 1), activation='relu')) # gotta fix this
+        modl.add(Conv1D(self.numbdimsfrst, self.numbdimsfrst,  input_shape=(self.numbdimsfrst[1], 1), activation='relu')) # gotta fix this
         modl.add(Dropout(self.fracdropfrst))
-        modl.add(Conv1D(self.numbdimsseco, self.numbdimsseco activation='relu'))
+        modl.add(Conv1D(self.numbdimsseco, self.numbdimsseco, activation='relu'))
         modl.add(Dropout(self.fracdropseco))
         modl.add(Dense(1, activation='sigmoid'))
         modl.compile(loss='binary_crossentropy', optimizer='remsprop', metrics=['accuracy'])
