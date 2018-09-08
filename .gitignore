@@ -1,4 +1,4 @@
-generate_data.py
+data/*.fits
 __pycache__/
 .DS_Store
 
