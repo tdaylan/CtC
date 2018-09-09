@@ -28,6 +28,9 @@
 ## Ensure the above nets perform well
 ## Channel off to individual projects
 
+# diagnostic actions to take when the solution is not working
+## data augmentation -- increase the number of (signal) training data samples by drawing from a previously trained generative model
+
 # diagnostic plots to produce
 ## animation showing samples from the training data samples
 ## a Probabilistic Graphical Model (PGM) of your neural network
