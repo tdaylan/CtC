@@ -2,6 +2,8 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Conv1D
 import tensorflow as tf
+from sklearn.metrics import confusion_matrix
+
 
 class gdatstrt(object):
     """
@@ -10,7 +12,7 @@ class gdatstrt(object):
     addConv_1D: add a 1D convolutional layer
     get_metr: returns all metrics of the network
     """
-    def __init__(self):
+    def __init__(self, numblays=2, datatype='here'):
         # fraction of data samples that will be used to test the model
         self.fractest = 0.1
     
@@ -29,26 +31,36 @@ class gdatstrt(object):
         # relating to the data
         self.listvalu['numbtime'] = np.array([3e0, 1e1, 3e1, 1e2, 3e2]).astype(int)
         self.numbtime = self.listvalu['numbtime']
+
         self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
         self.dept = self.listvalu['dept']
+
         self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
         self.nois = self.listvalu['nois']
+
         self.listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
         self.numbdata = self.listvalu['numbdata']
+
         self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
         self.fracplan = self.listvalu['fracplan']
         
         # hyperparameters
         self.listvalu['numbdatabtch'] = [32, 128, 512]
         self.numbdatabtch = self.listvalu['numbdatabtch']
-        self.listvalu['numbdimsfrst'] = [32, 64, 128]
-        self.numbdimsfrst = self.listvalu['numbdimsfrst']
-        self.listvalu['numbdimsseco'] = [32, 64, 128]
-        self.numbdimsseco = self.listvalu['numbdimsseco']
-        self.listvalu['fracdropfrst'] = [0.25, 0.5, 0.75]
-        self.fracdropfrst = self.listvalu['fracdropfrst']
-        self.listvalu['fracdropseco'] = [0.25, 0.5, 0.75]
-        self.fracdropseco = self.listvalu['fracdropseco']
+
+        # modularize!
+        for i in range(numblays):
+            self.listvalu['numbdims{!s}'.format(i)] = [32,64,128] # this could be a variable input, so each iter can be diff
+
+        # can be modularized to change from function input
+        self.numbdims = [32,64,128]
+
+        for i in range(numblays):
+            self.listvalu['fracdrop{!s}'.format(i)] = [0.25, 0.5, 0.75]
+
+        # can be modularized to change from function input
+        self.fracdrop = [0.25, 0.5, 0.75] 
+
         
         # list of strings holding the names of the variables
         self.liststrgvarb = self.listvalu.keys()
@@ -84,23 +96,28 @@ class gdatstrt(object):
         # number of signal data samples
         numbdataplan = int(self.numbdata * self.fracplan)
         
-        # generate (background-only) light curves
-        # temp -- this currently does not use the repository 'exop'
-        inpt = self.nois * np.random.randn(self.numbdata * self.numbtime).reshape((self.numbdata, self.numbtime)) + 1.
-        # set the label of all to 0 (background)
-        outp = np.zeros((self.numbdata, 1))
+
+        if datatype == 'here':
+            # generate (background-only) light curves
+            # temp -- this currently does not use the repository 'exop'
+            inpt = self.nois * np.random.randn(self.numbdata * self.numbtime).reshape((self.numbdata, self.numbtime)) + 1.
+            # set the label of all to 0 (background)
+            outp = np.zeros((self.numbdata, 1))
+            
+            # time indices of the transit 
+            ## beginning
+            indxinit = int(0.45 * self.numbtime)
+            ## end
+            indxfinl = int(0.55 * self.numbtime)
         
-        # time indices of the transit 
-        ## beginning
-        indxinit = int(0.45 * self.numbtime)
-        ## end
-        indxfinl = int(0.55 * self.numbtime)
-    
-        # lower the relevant time bins by the transit depth
-        inpt[:numbdataplan, indxinit:indxfinl] *= self.dept
-        # change the labels of these data samples to 1 (signal)
-        outp[:numbdataplan, 0] = 1.
+            # lower the relevant time bins by the transit depth
+            inpt[:numbdataplan, indxinit:indxfinl] *= self.dept
+            # change the labels of these data samples to 1 (signal)
+            outp[:numbdataplan, 0] = 1.
         
+        elif datatype == 'ete6':
+            inpt, outp = exop.main.retr_ete6()
+
         # randomize the data set
         indxdata = np.arange(self.numbdata)
         indxrand = np.random.choice(indxdata, size=self.numbdata, replace=False)
@@ -131,19 +148,21 @@ class gdatstrt(object):
 
         if whchLayr == 0:
             # if first layer:
-            self.modl.add(Dense(self.numbdimsfrst, input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Dense(self.numbdims, input_dim=self.numbtime, activation='relu'))
             
             if drop:
-                self.modl.add(Dropout(self.fracdropfrst))
+                self.modl.add(Dropout(self.fracdrop))
 
         elif whchLayr > 0:
-            self.modl.add(Dense(self.numbdimsseco, activation= 'relu'))
+            self.modl.add(Dense(self.numbdims, activation= 'relu'))
             
             if drop:
-                self.modl.add(Dropout(self.fracdropseco))
+                self.modl.add(Dropout(self.fracdrop))
 
         elif whchLayr == 'Last':
             self.modl.add(Dense(1, activation='sigmoid'))
+        
+        return None
 
     def addConv_1D(self, drop = True, whchLayr = True):
         """
@@ -158,16 +177,16 @@ class gdatstrt(object):
             whchLayr = len(self.modl.layers)
         if whchLayr == 0:
             # if first layer:
-            self.modl.add(Conv1D(self.numbdimsfrst, kernel_size=self.numbtime, activation='relu')) # should look into these inputs
+            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime, activation='relu')) # should look into these inputs
             
             if drop:
-                self.modl.add(Dropout(self.fracdropfrst))
+                self.modl.add(Dropout(self.fracdrop))
 
         elif whchLayr > 0:
-            self.modl.add(Conv1D(self.numbdimsseco, kernel_size=self.numbtime,  activation= 'relu')) # should look into these inputs
+            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime,  activation= 'relu')) # should look into these inputs
             
             if drop:
-                self.modl.add(Dropout(self.fracdropseco))
+                self.modl.add(Dropout(self.fracdrop))
 
         return None
 
@@ -193,15 +212,15 @@ class gdatstrt(object):
         numbepocchec = 5 # hard coded
         
 
-        for y in self.inxepoc:
+        for y in self.indxepoc:
             hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=0)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y- numbepocchec)
-            if y == self.gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
+            if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
                 print('Warning! The optimizer may not have converged.')
                 print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
 
-            for r in self.gdat.inxrtyp:
+            for r in self.indxrtyp:
                 if r==0:
                     inpt = self.inpttran
                     outp = self.outptran

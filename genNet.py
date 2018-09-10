@@ -17,7 +17,7 @@ metr: metrics
 
 """
 
-class nets():
+class nets(object):
     def __init__(self, gdat, indxvaluthis=None, strgvarbthis=None):
         self.gdat = gdat
         listvalutemp = {}
@@ -79,7 +79,7 @@ class nets():
         
         if gdat.datatype == 'ete6':  
             
-            exop.main.retr_ete6()
+            inpt, outp = exop.main.retr_ete6()
 
         # randomize the data set
         indxdata = np.arange(numbdata)
@@ -212,9 +212,140 @@ class nets():
 
 
 class anet(nets):
-    def add_dnse(self):
-        pass
+    def __init__(self, gdat, numblays=2, indxvaluthis=None, strgvarbthis=None):
+        self.gdat = gdat
+        listvalutemp = {}
+        for o, strgvarb in enumerate(gdat.liststrgvarb):
+            listvalutemp[strgvarb] = gdat.listvalu[strgvarb][int(gdat.numbvalu[o]/2)]
+
+        if strgvarbthis != None:
+            listvalutemp[strgvarbthis] = gdat.listvalu[strgvarbthis][indxvaluthis]
+
+        # number of time bins
+        numbtime = listvalutemp['numbtime']  
+        self.numbtime = numbtime
+        # transit depth
+        dept = listvalutemp['dept']
+        # standard deviation of noise
+        nois = listvalutemp['nois']
+        
+        # number of data samples
+        numbdata = listvalutemp['numbdata']
+        # fraction of signal in the data set
+        fracplan = listvalutemp['fracplan']
+        
+        # modularize!
+        for i in range(numblays):
+            listvalutemp['numbdims{!s}'.format(i)] = [32,64,128] # this could be a variable input, so each iter can be diff
+
+        # can be modularized to change from function input
+        self.numbdims = [32,64,128]
+
+        for i in range(numblays):
+            listvalutemp['fracdrop{!s}'.format(i)] = [0.25, 0.5, 0.75]
+
+        # can be modularized to change from function input
+        self.fracdrop = [0.25, 0.5, 0.75] 
+        
+        # number of test data samples
+        numbdatatest = int(numbdata * gdat.fractest)
+        self.numbdatatest = numbdatatest
+        # number of training data samples
+        self.numbdatatran = numbdata - numbdatatest
+        # number of signal data samples
+        numbdataplan = int(numbdata * fracplan)
+        
+        if gdat.datatype == 'here':  
+            
+            # generate (background-only) light curves
+            # temp -- this currently does not use the repository 'exop'
+            inpt = nois * np.random.randn(numbdata * numbtime).reshape((numbdata, numbtime)) + 1.
+            # set the label of all to 0 (background)
+            outp = np.zeros((numbdata, 1))
+            
+            # time indices of the transit 
+            ## beginning
+            indxinit = int(0.45 * numbtime)
+            ## end
+            indxfinl = int(0.55 * numbtime)
     
-    def add_conv1D(self):
-        pass
+            # lower the relevant time bins by the transit depth
+            inpt[:numbdataplan, indxinit:indxfinl] *= dept
+            # change the labels of these data samples to 1 (signal)
+            outp[:numbdataplan, 0] = 1.
+        
+        if gdat.datatype == 'ete6':  
+            
+            exop.main.retr_ete6()
+
+        # randomize the data set
+        indxdata = np.arange(numbdata)
+        indxrand = np.random.choice(indxdata, size=numbdata, replace=False)
+        inpt = inpt[indxrand, :]
+        outp = outp[indxrand, :]
+        self.inpt = inpt
+        self.outp = outp
+
+        # divide the data set into training and test data sets
+        numbdatatest = int(gdat.fractest * numbdata)
+        self.inpttest = inpt[:numbdatatest, :]
+        self.outptest = outp[:numbdatatest, :]
+        self.inpttran = inpt[numbdatatest:, :]
+        self.outptran = outp[numbdatatest:, :]
+
+        self.modl = Sequential()
+
+
+    def add_dnse(self, drop=True, whchLayr=True):
+        """
+        Functionally can be added at any point in the model
+
+        drop: True if Dropout is desired in the model
+        whchLayr: True unless last layer, at which point this var needs to be set to 'Last'
+        """
+        if whchLayr:
+            # check to see if this is the last layer, if not, see how many layers precede this next layer
+            whchLayr = len(self.modl.layers)
+
+        if whchLayr == 0:
+            # if first layer:
+            self.modl.add(Dense(self.numbdims, input_dim=self.numbtime, activation='relu'))
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        elif whchLayr > 0:
+            self.modl.add(Dense(self.numbdims, activation= 'relu'))
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        elif whchLayr == 'Last':
+            self.modl.add(Dense(1, activation='sigmoid'))
+
+    def add_conv1D(self, drop=True, whchLayr=True):
+        """
+        Functionally can be added at any point in the model
+
+        drop: True if Dropout is desired in the model
+        whchLayr: True unless last layer, at which point this var needs to be set to 'Last'
+        This should not be the last layer!
+        """
+        if whchLayr:
+            # check to see if this is the last layer, if not, see how many layers precede this next layer
+            whchLayr = len(self.modl.layers)
+        if whchLayr == 0:
+            # if first layer:
+            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime, activation='relu')) # should look into these inputs
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        elif whchLayr > 0:
+            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime,  activation= 'relu')) # should look into these inputs
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        return None
     
