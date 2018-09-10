@@ -19,6 +19,11 @@ To set up your environment variables, put
 export TDGU_DATA_PATH=/path/to/your/folder/
 in your ~/.bashrc file.
 
+# Levels of data processing
+1 - Raw light curve
+2 - Phase-folded light curve
+3 - Rebinning of the phased-folded light curve
+
 ## Data
 ### Kepler
 ### https://archive.stsci.edu/kepler/
