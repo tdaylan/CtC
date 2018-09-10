@@ -11,11 +11,14 @@
 
 
 # Useful links
-## TCE labels
+## Currently known exoplanets
 ## http://exoplanetarchive.ipac.caltech.edu/
 
-## Lightcurve data
-## http://archive.stsci.edu/
+## Data
+### Kepler
+### https://archive.stsci.edu/kepler/
+### ETE-6 (TESS Simulated)
+### https://archive.stsci.edu/tess/ete-6.html
 
 ## Baseline paper
 ## https://arxiv.org/pdf/1712.05044.pdf
@@ -35,8 +38,10 @@
 # diagnostic plots to produce
 ## animation showing samples from the training data samples
 ## a Probabilistic Graphical Model (PGM) of your neural network
-## 2D projection of the feature space representation of the training data samples (e.g. via t-SNE)
-## AUC, i.e., recall vs precision for a grid of classification thresholds
+## Recall, precision and accuracy for the training and test data sets as a function of epoch index
+## Recall vs. precision for a list of classification thresholds and the Area Under the Curve (AUC).
+## The data distribution in intermediate representations (i.e., after each successive layer in the network)
+## 2D projection of the feature space representation of the training data samples (e.g. via t-SNE, variational autoencoder or SOM)
 
 
 
