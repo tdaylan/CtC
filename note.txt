@@ -30,6 +30,7 @@
 
 # diagnostic actions to take when the solution is not working
 ## data augmentation -- increase the number of (signal) training data samples by drawing from a previously trained generative model
+## add batch normalization after FC or pool layers
 
 # diagnostic plots to produce
 ## animation showing samples from the training data samples
