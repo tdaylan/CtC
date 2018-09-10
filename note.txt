@@ -14,6 +14,11 @@
 ## Currently known exoplanets
 ## http://exoplanetarchive.ipac.caltech.edu/
 
+# Useful information
+To set up your environment variables, put
+export TDGU_DATA_PATH=/path/to/your/folder/
+in your ~/.bashrc file.
+
 ## Data
 ### Kepler
 ### https://archive.stsci.edu/kepler/
@@ -27,6 +32,7 @@
 # to-do-list
 ## implement a simple 1D CNN on 
 ## implement a 2 channel 1D CNN with FC layers
+## implement local and global light curve representations
 ## get Kepler data from MAST
 ## Ensure the above nets perform well
 ## Channel off to individual projects
@@ -42,6 +48,7 @@
 ## Recall vs. precision for a list of classification thresholds and the Area Under the Curve (AUC).
 ## The data distribution in intermediate representations (i.e., after each successive layer in the network)
 ## 2D projection of the feature space representation of the training data samples (e.g. via t-SNE, variational autoencoder or SOM)
+
 
 
 
