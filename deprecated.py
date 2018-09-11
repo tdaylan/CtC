@@ -5,6 +5,7 @@ import sklearn
 from sklearn.metrics import confusion_matrix
 
 
+# this file has copies of code in main.py. I am keeping the file for backward compatibility, but let's move relevant code to main.py and keep a single copy.
 
 """
 inputs=
