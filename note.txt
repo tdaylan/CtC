@@ -18,6 +18,7 @@
 To set up your environment variables, put
 export TDGU_DATA_PATH=/path/to/your/folder/
 in your ~/.bashrc file.
+export $PYTHONPATH=$PYTOHPATH:/path/to/thefolderwhereyouhaveexopandctc
 
 # Levels of data processing
 1 - Raw light curve
