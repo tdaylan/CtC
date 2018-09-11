@@ -8,7 +8,7 @@
 ## avoid uncommented parameter values in arbitrary locations in the code. Try to define parameter values together at the top your code and comment them.
 ## not repeat code. If you need to do the same operation in multiple points, make your code a function and call it multiple times.
 ## maintain separate branches for major tasks, which will then be merged into the master branch
-
+## keep a single file (main.py) for all functions for the moment. Write new files for executables (such as expl.py)
 
 # Useful links
 ## Currently known exoplanets
@@ -55,5 +55,12 @@ in your ~/.bashrc file.
 ## 2D projection of the feature space representation of the training data samples (e.g. via t-SNE, variational autoencoder or SOM)
 
 
-
+# log
+20180911
+- moved some content from inside the constructor of gdatstrt into the loop, where we iterate over hyperparameters
+- changed whchLayr to strglayr and ensured it only admits a single type of data struture (not int and string at the same time)
+- moved utility functions into the same (main.py) file. The idea is to have the callable code in one file for the moment, and call it from various callables (such as expl.py).
+- should unify Nets into main.py
+- connected exop.py to CtC, got rid of data generation inside CtC
+- added numblayr, numbdimslayr and fracdrop hyperparameters
 

@@ -13,8 +13,191 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(context='poster', style='ticks', color_codes=True)
+import exop
+from exop import main as exopmain
 
-from gdatFile import gdatstrt
+class gdatstrt(object):
+    
+    """
+    init: Initializes all the testing data -- has all variables needed for testing
+    appdfcon: add a fully connected layer
+    appdcon1: add a 1D convolutional layer
+    retr_metr: returns all metrics of the network
+    """
+    
+    def __init__(self, datatype='here'):
+    
+        # fraction of data samples that will be used to test the model
+        self.fractest = 0.1
+    
+        # number of epochs
+        self.numbepoc = 50
+    
+        # number of runs for each configuration in order to determine the statistical uncertainty
+        self.numbruns = 2
+
+        self.indxepoc = np.arange(self.numbepoc)
+        self.indxruns = np.arange(self.numbruns)
+
+        # a dictionary to hold the variable values for which the training will be repeated
+        self.listvalu = {}
+        ## generative parameters of mock data
+        self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
+        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
+        self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
+        self.listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
+        self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
+        ## hyperparameters
+        self.listvalu['numbdatabtch'] = [32, 128, 512]
+        ### number of layers
+        self.listvalu['numblayr'] = [1, 2, 3, 4]
+        ### number of dimensions in each layer
+        self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
+        ### fraction of dropout in in each layer
+        self.listvalu['fracdrop'] = [0.25, 0.4, 0.5, 0.6, 0.75]
+        
+        # list of strings holding the names of the variables
+        self.liststrgvarb = self.listvalu.keys()
+        
+        self.numbvarb = len(self.liststrgvarb) # number of variables
+        self.indxvarb = np.arange(self.numbvarb) # array of all indexes to get any variable
+        
+        self.numbvalu = np.empty(self.numbvarb, dtype=int)
+        self.indxvalu = [[] for o in self.indxvarb]
+        for o, strgvarb in enumerate(self.liststrgvarb):
+            self.numbvalu[o] = len(self.listvalu[strgvarb])
+            self.indxvalu[o] = np.arange(self.numbvalu[o])
+        
+        # dictionary to hold the metrics resulting from the runs
+        self.dictmetr = {}
+        self.liststrgmetr = ['prec', 'accu', 'reca']
+        self.listlablmetr = ['Precision', 'Accuracy', 'Recall']
+        self.liststrgrtyp = ['vali', 'tran']
+        self.listlablrtyp = ['Training', 'Validation']
+        self.numbrtyp = len(self.liststrgrtyp)
+        self.indxrtyp = np.arange(self.numbrtyp)
+        
+        for o, strgvarb in enumerate(self.liststrgvarb):
+            self.dictmetr[strgvarb] = np.empty((2, 3, self.numbruns, self.numbvalu[o]))
+        
+
+    
+    # trying to condense all class things into one __init__ so all methods can just be called here
+    def appdfcon(self, drop=True, strglayr='init'):
+        """
+        Functionally can be added at any point in the model
+
+        drop: True if Dropout is desired in the model
+        strglayr: 'init', 'medi', 'finl'
+        """
+        if strglayr:
+            # check to see if this is the last layer, if not, see how many layers precede this next layer
+            strglayr = len(self.modl.layers)
+
+        if strglayr == 'init':
+            # if first layer:
+            self.modl.add(Dense(self.numbdims, input_dim=self.numbtime, activation='relu'))
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        elif strglayr == 'inte':
+            self.modl.add(Dense(self.numbdims, activation= 'relu'))
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        elif strglayr == 'last':
+            self.modl.add(Dense(1, activation='sigmoid'))
+        
+        return None
+
+
+    def appdcon1(self, drop=True, strglayr=True):
+        """
+        Functionally can be added at any point in the model
+
+        drop: True if Dropout is desired in the model
+        strglayr: True unless last layer, at which point this var needs to be set to 'Last'
+        This should not be the last layer!
+        """
+        if strglayr != 'last':
+            # check to see if this is the last layer, if not, see how many layers precede this next layer
+            strglayr = len(self.modl.layers)
+        if strglayr == 'init':
+            # if first layer:
+            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime, activation='relu')) # should look into these inputs
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+        elif strglayr == 'medi':
+            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime,  activation= 'relu')) # should look into these inputs
+            
+            if drop:
+                self.modl.add(Dropout(self.fracdrop))
+
+        return None
+
+
+    def retr_metr(self, indxvaluthis=None, strgvarbthis=None):     
+        """
+        Performance method
+        """
+
+        self.modl.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+        print self.modl.summary()
+
+        # empt dict
+        listvalutemp = {}
+        # store with the vars we iterate over
+        for o, strgvarb in enumerate(self.liststrgvarb):
+            listvalutemp[strgvarb] = self.listvalu[strgvarb][self.numbvalu[o]/2]        
+        
+        # catch that input and set another val in the dict
+        if strgvarbthis != None:
+            listvalutemp[strgvarbthis] = self.listvalu[strgvarbthis][indxvaluthis]   
+
+        metr = np.zeros((self.numbepoc, 2, 3)) - 1
+        loss = np.empty(self.numbepoc)
+        numbepocchec = 5 # hard coded
+        
+
+        for y in self.indxepoc:
+            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=0)
+            loss[y] = hist.history['loss'][0]
+            indxepocloww = max(0, y- numbepocchec)
+            if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
+                print('Warning! The optimizer may not have converged.')
+                print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
+
+            for r in self.indxrtyp:
+                if r==0:
+                    inpt = self.inpttran
+                    outp = self.outptran
+                    numdatatemp = self.numbdatatran
+                else:
+                    inpt = self.inpttest
+                    outp = self.outptest
+                    numbdatatemp = self.numbdatatest
+
+                outppred = (self.modl.predict(inpt) > 0.5).astype(int)
+                score = self.modl.evaluate(inpt,outp, verpose=0)
+                matrconf = confusion_matrix(outp[:, 0], outppred[:, 0])
+
+
+
+                trne = matrconf[0, 0]
+                flpo = matrconf[0, 1]
+                flne = matrconf[1, 0]
+                trpo = matrconf[1, 1]
+
+
+                if float(trpo + flpo) > 0:
+                    metr[y, r, 0] = trpo / float(trpo + flpo)
+                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
+                if float(trpo + flne) > 0:
+                    metr[y, r, 2] = trpo / float(trpo + flne)
+            return metr
 
 
 def summgene(varb):
@@ -27,21 +210,13 @@ def summgene(varb):
     print (np.mean(varb))
     print (varb.shape)
 
-# this can be wrapped in a function to allow for customization or 
-# initialize the data here
-gdat = gdatstrt()
-# add a fully connected layer
-gdat.addFcon()
-# add a fully connected layer
-gdat.addFcon()
-# final output layer
-gdat.addFcon(whchLayr='Last')
 
 def expl( \
          # string indicating the model
          strguser='tansu', \
          strgtopo='fcon', \
-         zoomtype='locl' """if local, operates normal, if local+globa or dub(double) it will take local and global at the same time""" \
+         # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
+         zoomtype='locl', \
          datatype='here', \
         ):
 
@@ -49,18 +224,16 @@ def expl( \
     Function to explore the effect of hyper-parameters (and data properties for mock data) on binary classification metrics
     '''
     
-    # global object that will hold global variables
+    # initialization
+    ## global object that will hold global variables
     gdat = gdatstrt()
 
-    # time stamp string
+    ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-    # function that will do the training for the desired topology
-    # functopo = globals().get(strgtopo)
     
     print ('CtC explorer initialized at %s.' % strgtimestmp)
     
-    # path where plots will be generated
+    ## path where plots will be generated
     pathplot = os.environ['TDGU_DATA_PATH'] + '/nnet_ssupgadn/'
     
     print ('Will generate plots in %s' % pathplot)
@@ -79,7 +252,8 @@ def expl( \
         
         print ('Run index %d' % t)
         # do the training for the central value
-        #metr = functopo(gdat)
+        # temp -- current implementation repeats running of the central point
+        #metr = gdat.retr_metr()
         
         # for each variable
         for o, strgvarb in enumerate(gdat.liststrgvarb): 
@@ -88,10 +262,56 @@ def expl( \
 
             # for each value
             for i in gdat.indxvalu[o]:
-              
+
+                gdat.numbdata = gdat.listvalu['numbdata'][i]
+                gdat.numblayr = gdat.listvalu['numblayr'][i]
+                gdat.numbdatabtch = gdat.listvalu['numbdatabtch'][i]
+                gdat.dept = gdat.listvalu['dept'][i]
+                gdat.nois = gdat.listvalu['nois'][i]
+                gdat.numbdimslayr = gdat.listvalu['numbdimslayr'][i]
+                gdat.fracdrop = gdat.listvalu['fracdrop'][i]
+                gdat.numbtime = gdat.listvalu['numbtime'][i]
+                gdat.fracplan = gdat.listvalu['fracplan'][i]
+                gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
+                gdat.numbnois = gdat.numbdata - gdat.numbplan
+                
+                gdat.indxlayr = range(gdat.numblayr)
+
+                # number of test data samples
+                gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
+                # number of training data samples
+                gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
+                # number of signal data samples
+                numbdataplan = int(gdat.numbdata * gdat.fracplan)
+        
+                if datatype == 'here':
+                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime)
+
+                if datatype == 'ete6':
+                    gdat.inpt, gdat.outp = exopmain.retr_ete6()
+
+                # divide the data set into training and test data sets
+                numbdatatest = int(gdat.fractest * gdat.numbdata)
+                gdat.inpttest = gdat.inpt[:numbdatatest, :]
+                gdat.outptest = gdat.outp[:numbdatatest]
+                gdat.inpttran = gdat.inpt[numbdatatest:, :]
+                gdat.outptran = gdat.outp[numbdatatest:]   
+
+                gdat.modl = Sequential()
+
+                # construct the neural net
+                ## add a fully connected layer
+                gdat.appdfcon()
+                
+                ## add a fully connected layer
+                gdat.appdfcon()
+                
+                ## final output layer
+                gdat.appdfcon(strglayr='last')
+                
                 # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                 # do the training for the specific value of the variable of interest
-                metr = functopo(gdat, i, strgvarb)
+                metr = gdat.retr_metr(i, strgvarb)
                 
                 gdat.dictmetr[strgvarb][0, 0, t, i] = metr[-1, 0, 0]
                 gdat.dictmetr[strgvarb][1, 0, t, i] = metr[-1, 1, 0]
