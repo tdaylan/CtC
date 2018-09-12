@@ -97,9 +97,9 @@ class gdatstrt(object):
         """
 
         if strglayr == 'init':
-            self.modl.add(Dense(self.listvalu['numbdimslayr'], input_dim=self.listvalu['numbtime'], activation='relu'))
+            self.modl.add(Dense(self.numbdimslay, input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
-            self.modl.add(Dense(self.listvalu['numbdimslayr'], activation= 'relu'))
+            self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
         elif strglayr == 'last':
             self.modl.add(Dense(1, activation='sigmoid'))
         
@@ -117,9 +117,9 @@ class gdatstrt(object):
         """
         
         if strglayr == 'init':
-            self.modl.add(Conv1D(self.listvalu['numbdimslayr'], kernel_size=self.listvalu['numbtime'], input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
-            self.modl.add(Conv1D(self.listvalu['numbdimslayr'], kernel_size=self.listvalu['numbtime'], activation= 'relu'))
+            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, activation= 'relu'))
         if fracdrop > 0.:
             self.modl.add(Dropout(fracdrop))
         
@@ -130,22 +130,12 @@ class gdatstrt(object):
         Performance method
         """
 
-        # empt dict
-        listvalutemp = {}
-        # store with the vars we iterate over
-        for o, strgvarb in enumerate(self.liststrgvarb):
-            listvalutemp[strgvarb] = self.listvalu[strgvarb][self.numbvalu[o]/2]        
-        
-        # catch that input and set another val in the dict
-        if strgvarbthis != None:
-            listvalutemp[strgvarbthis] = self.listvalu[strgvarbthis][indxvaluthis]   
-
         metr = np.zeros((self.numbepoc, 2, 3)) - 1
         loss = np.empty(self.numbepoc)
         numbepocchec = 5 # hard coded
         
         for y in self.indxepoc:
-            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.listvalu['numbdatabtch'], validation_split=self.fractest, verbose=1)
+            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
             if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
@@ -217,6 +207,7 @@ def expl( \
     
     gdat = gdatstrt(datatype=datatype)
 
+    # evaluate at the central point?
     fracdropinpt = gdat.listvalu['fracdrop']
 
     # add a fully connected layer
