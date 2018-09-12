@@ -40,6 +40,7 @@ class gdatstrt(object):
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
 
+
         # a dictionary to hold the variable values for which the training will be repeated
         self.listvalu = {}
         ## generative parameters of mock data
@@ -96,14 +97,14 @@ class gdatstrt(object):
         """
 
         if strglayr == 'init':
-            self.modl.add(Dense(self.numbdimslayr, input_dim=self.numbtime, activation='relu'))
-        elif strglayr == 'inte':
-            self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
+            self.modl.add(Dense(self.listvalu['numbdimslayr'], input_dim=self.listvalu['numbtime'], activation='relu'))
+        elif strglayr == 'medi':
+            self.modl.add(Dense(self.listvalu['numbdimslayr'], activation= 'relu'))
         elif strglayr == 'last':
             self.modl.add(Dense(1, activation='sigmoid'))
         
         if fracdrop > 0.:
-            self.modl.add(Dropout(self.fracdrop))
+            self.modl.add(Dropout(fracdrop)) # do we want this as an input or from the object?
         
 
     def appdcon1(self, fracdrop, strglayr='init', strgactv='relu'):
@@ -116,12 +117,11 @@ class gdatstrt(object):
         """
         
         if strglayr == 'init':
-            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Conv1D(self.listvalu['numbdimslayr'], kernel_size=self.listvalu['numbtime'], input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
-            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, activation= 'relu'))
-            
+            self.modl.add(Conv1D(self.listvalu['numbdimslayr'], kernel_size=self.listvalu['numbtime'], activation= 'relu'))
         if fracdrop > 0.:
-            self.modl.add(Dropout(self.fracdrop))
+            self.modl.add(Dropout(fracdrop))
         
 
 
@@ -145,7 +145,7 @@ class gdatstrt(object):
         numbepocchec = 5 # hard coded
         
         for y in self.indxepoc:
-            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
+            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.listvalu['numbdatabtch'], validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
             if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
@@ -211,9 +211,22 @@ def expl( \
     Function to explore the effect of hyper-parameters (and data properties for mock data) on binary classification metrics
     '''
     
-    # initialization
-    ## global object that will hold global variables
-    gdat = gdatstrt()
+    # global object that will hold global variables
+    # this can be wrapped in a function to allow for customization 
+    # initialize the data here
+    
+    gdat = gdatstrt(datatype=datatype)
+
+    fracdropinpt = gdat.listvalu['fracdrop']
+
+    # add a fully connected layer
+    gdat.appdfcon(fracdropinpt[0], strglayr='init')
+    # add a fully connected layer
+    gdat.appdfcon(fracdropinpt[0], strglayr='medi')
+    # final output layer
+    gdat.appdfcon(0, strglayr='Last')
+
+
 
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
