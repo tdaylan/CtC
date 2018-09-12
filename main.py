@@ -400,9 +400,3 @@ def expl( \
             plt.close()
     
 
-def cnfg_tansu():
-    
-    expl( \
-         datatype='ete6', \
-        )
-
