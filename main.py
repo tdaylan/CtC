@@ -9,6 +9,7 @@ import tensorflow as tf
 import sklearn
 from sklearn.metrics import confusion_matrix
 
+import astropy as ap
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -31,10 +32,10 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 50
+        self.numbepoc = 10
     
         # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 5
+        self.numbruns = 3
 
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
@@ -46,19 +47,19 @@ class gdatstrt(object):
         # temp
         self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1])
         self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-        self.listvalu['numbdata'] = np.array([1e2, 3e2, 1e4, 3e3, 1e4]).astype(int)
-        self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
+        self.listvalu['numbdata'] = np.array([3e1, 1e4, 3e4, 1e5, 3e5]).astype(int)
+        self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.7, 0.9]
         ## hyperparameters
-        self.listvalu['numbdatabtch'] = [16, 32, 128, 512, 1024]
+        self.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
         ### number of layers
         # temp
-        self.listvalu['numblayr'] = [1, 2, 2, 4, 5]
+        self.listvalu['numblayr'] = [1, 2, 3, 4, 5]
         ### number of dimensions in each layer
         # temp
-        self.listvalu['numbdimslayr'] = [32, 64, 32, 256, 512]
+        self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
         ### fraction of dropout in in each layer
         # temp
-        self.listvalu['fracdrop'] = [0.25, 0.4, 0., 0.6, 0.75]
+        self.listvalu['fracdrop'] = [0.25, 0.4, 0.5, 0.6, 0.75]
         
         # list of strings holding the names of the variables
         self.liststrgvarb = self.listvalu.keys()
@@ -105,13 +106,13 @@ class gdatstrt(object):
             self.modl.add(Dropout(self.fracdrop))
         
 
-    def appdcon1(self, fracdrop, strglayr='init'):
+    def appdcon1(self, fracdrop, strglayr='init', strgactv='relu'):
         """
-        Functionally can be added at any point in the model
-
-        drop: True if Dropout is desired in the model
-        strglayr: True unless last layer, at which point this var needs to be set to 'Last'
+        Adds a 1D CNN layer to the network
         This should not be the last layer!
+
+        fracdrop: fraction of drop-out
+        strglayr: 'init', 'medi', 'finl'
         """
         
         if strglayr == 'init':
@@ -174,9 +175,14 @@ class gdatstrt(object):
 
                 if float(trpo + flpo) > 0:
                     metr[y, r, 0] = trpo / float(trpo + flpo)
+                else:
+                    print 'No positive found...'
+                    #raise Exception('')
                 metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
                 if float(trpo + flne) > 0:
                     metr[y, r, 2] = trpo / float(trpo + flne)
+                else:
+                    raise Exception('')
                 
         return metr
 
@@ -249,76 +255,87 @@ def expl( \
 
             # for each value
             for i in gdat.indxvalu[o]:
-
-                for strgvarbtemp in gdat.liststrgvarb: 
-                    setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][gdat.numbvalu[o]/2])
-                setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
                 
-                for strgvarbtemp in gdat.liststrgvarb: 
-                    print (strgvarbtemp)
-                    print (getattr(gdat, strgvarbtemp))
-
-                gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-                gdat.numbnois = gdat.numbdata - gdat.numbplan
-                
-                gdat.indxtime = np.arange(gdat.numbtime)
-                gdat.indxdata = np.arange(gdat.numbdata)
-                gdat.indxlayr = np.arange(gdat.numblayr)
-
-                # number of test data samples
-                gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
-                # number of training data samples
-                gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
-                # number of signal data samples
-                numbdataplan = int(gdat.numbdata * gdat.fracplan)
-                
-                if datatype == 'here':
-                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
-
-                if datatype == 'ete6':
-                    gdat.inpt, gdat.outp = exopmain.retr_ete6()
+                pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
+                # temp
+                if False and os.path.exists(pathsave):
+                    listhdun = ap.io.fits.open(pathsave)
+                    metr = listhdun[0].data 
+                else:
+                    for strgvarbtemp in gdat.liststrgvarb: 
+                        setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][gdat.numbvalu[o]/2])
+                    setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
                     
-                # plot
-                figr, axis = plt.subplots() # figr unused
-                for k in gdat.indxdata:
-                    if k < 10:
-                        if gdat.outp[k] == 1:
-                            colr = 'r'
-                        else:
-                            colr = 'b'
-                        axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-                plt.tight_layout()
-                path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
-                plt.savefig(path)
-                plt.close()
+                    for strgvarbtemp in gdat.liststrgvarb: 
+                        print (strgvarbtemp)
+                        print (getattr(gdat, strgvarbtemp))
+
+                    gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
+                    gdat.numbnois = gdat.numbdata - gdat.numbplan
+                    
+                    gdat.indxtime = np.arange(gdat.numbtime)
+                    gdat.indxdata = np.arange(gdat.numbdata)
+                    gdat.indxlayr = np.arange(gdat.numblayr)
+
+                    # number of test data samples
+                    gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
+                    # number of training data samples
+                    gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
+                    # number of signal data samples
+                    numbdataplan = int(gdat.numbdata * gdat.fracplan)
+                    
+                    if datatype == 'here':
+                        gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+
+                    if datatype == 'ete6':
+                        gdat.inpt, gdat.outp = exopmain.retr_ete6()
+                        
+                    # plot
+                    figr, axis = plt.subplots() # figr unused
+                    for k in gdat.indxdata:
+                        if k < 10:
+                            if gdat.outp[k] == 1:
+                                colr = 'r'
+                            else:
+                                colr = 'b'
+                            axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
+                    plt.tight_layout()
+                    path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
+                    plt.savefig(path)
+                    plt.close()
         
-                # divide the data set into training and test data sets
-                numbdatatest = int(gdat.fractest * gdat.numbdata)
-                gdat.inpttest = gdat.inpt[:numbdatatest, :]
-                gdat.outptest = gdat.outp[:numbdatatest]
-                gdat.inpttran = gdat.inpt[numbdatatest:, :]
-                gdat.outptran = gdat.outp[numbdatatest:]   
+                    # divide the data set into training and test data sets
+                    numbdatatest = int(gdat.fractest * gdat.numbdata)
+                    gdat.inpttest = gdat.inpt[:numbdatatest, :]
+                    gdat.outptest = gdat.outp[:numbdatatest]
+                    gdat.inpttran = gdat.inpt[numbdatatest:, :]
+                    gdat.outptran = gdat.outp[numbdatatest:]   
 
-                gdat.modl = Sequential()
+                    gdat.modl = Sequential()
 
-                # construct the neural net
-                # add the first fully connected layer
-                gdat.appdfcon(gdat.fracdrop)
-                
-                ## add other fully connected layers
-                if gdat.numblayr > 2:
-                    for k in range(gdat.numblayr - 2):
-                        gdat.appdfcon(gdat.fracdrop, strglayr='inte')
-                
-                ## add the last output layer
-                gdat.appdfcon(gdat.fracdrop, strglayr='last')
-                
-                gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
-                
-                # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
-                # do the training for the specific value of the variable of interest
-                metr = gdat.retr_metr(i, strgvarb)
-                
+                    # construct the neural net
+                    # add the first fully connected layer
+                    gdat.appdfcon(gdat.fracdrop)
+                    
+                    ## add other fully connected layers
+                    if gdat.numblayr > 2:
+                        for k in range(gdat.numblayr - 2):
+                            gdat.appdfcon(gdat.fracdrop, strglayr='inte')
+                    
+                    ## add the last output layer
+                    gdat.appdfcon(gdat.fracdrop, strglayr='last')
+                    
+                    gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+                    
+                    # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
+                    # do the training for the specific value of the variable of interest
+                    metr = gdat.retr_metr(i, strgvarb)
+                    
+                    # save to the disk
+                    hdun = ap.io.fits.PrimaryHDU(metr)
+                    listhdun = ap.io.fits.HDUList([hdun])
+                    listhdun.writeto(pathsave, overwrite=True)
+
                 gdat.dictmetr[strgvarb][0, 0, t, i] = metr[-1, 0, 0]
                 gdat.dictmetr[strgvarb][1, 0, t, i] = metr[-1, 1, 0]
                 gdat.dictmetr[strgvarb][0, 1, t, i] = metr[-1, 0, 1]
@@ -361,7 +378,7 @@ def expl( \
                 for t in gdat.indxruns:
                     axis.plot(gdat.listvalu[strgvarb], gdat.dictmetr[strgvarb][r, l, t, :], marker='D', ls='', markersize=5, alpha=alph, color=colr)
             
-            axis.set_ylim([0., 1.])
+            #axis.set_ylim([-0.1, 1.1])
 
             if strgvarb == 'numbtime':
                 labl = '$N_{time}$'

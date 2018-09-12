@@ -1,4 +1,4 @@
-from generate_data import retr_datamock
+from generate_data_tobemovedtoexop import retr_datamock
 from genNet import nets
 from gdatFile import gdatstrt
 
