@@ -39,6 +39,7 @@ class gdatstrt(object):
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
 
+
         # a dictionary to hold the variable values for which the training will be repeated
         self.listvalu = {}
         ## generative parameters of mock data
@@ -95,32 +96,29 @@ class gdatstrt(object):
         """
 
         if strglayr == 'init':
-            self.modl.add(Dense(self.numbdimslayr, input_dim=self.numbtime, activation='relu'))
-        elif strglayr == 'inte':
-            self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
+            self.modl.add(Dense(self.listvalu['numbdimslayr'], input_dim=self.listvalu['numbtime'], activation='relu'))
+        elif strglayr == 'medi':
+            self.modl.add(Dense(self.listvalu['numbdimslayr'], activation= 'relu'))
         elif strglayr == 'last':
             self.modl.add(Dense(1, activation='sigmoid'))
         
         if fracdrop > 0.:
-            self.modl.add(Dropout(self.fracdrop))
+            self.modl.add(Dropout(fracdrop)) # do we want this as an input or from the object?
         
 
     def appdcon1(self, fracdrop, strglayr='init'):
         """
         Functionally can be added at any point in the model
 
-        drop: True if Dropout is desired in the model
-        strglayr: True unless last layer, at which point this var needs to be set to 'Last'
         This should not be the last layer!
         """
         
         if strglayr == 'init':
-            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Conv1D(self.listvalu['numbdimslayr'], kernel_size=self.listvalu['numbtime'], input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
-            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, activation= 'relu'))
-            
+            self.modl.add(Conv1D(self.listvalu['numbdimslayr'], kernel_size=self.listvalu['numbtime'], activation= 'relu'))
         if fracdrop > 0.:
-            self.modl.add(Dropout(self.fracdrop))
+            self.modl.add(Dropout(fracdrop))
         
 
 
@@ -144,7 +142,7 @@ class gdatstrt(object):
         numbepocchec = 5 # hard coded
         
         for y in self.indxepoc:
-            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
+            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.listvalu['numbdatabtch'], validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
             if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
@@ -205,9 +203,22 @@ def expl( \
     Function to explore the effect of hyper-parameters (and data properties for mock data) on binary classification metrics
     '''
     
-    # initialization
-    ## global object that will hold global variables
-    gdat = gdatstrt()
+    # global object that will hold global variables
+    # this can be wrapped in a function to allow for customization 
+    # initialize the data here
+    
+    gdat = gdatstrt(datatype=datatype)
+
+    fracdropinpt = gdat.listvalu['fracdrop']
+
+    # add a fully connected layer
+    gdat.appdfcon(fracdropinpt[0], strglayr='init')
+    # add a fully connected layer
+    gdat.appdfcon(fracdropinpt[0], strglayr='medi')
+    # final output layer
+    gdat.appdfcon(0, strglayr='Last')
+
+
 
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -258,22 +269,22 @@ def expl( \
                     print (strgvarbtemp)
                     print (getattr(gdat, strgvarbtemp))
 
-                gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-                gdat.numbnois = gdat.numbdata - gdat.numbplan
+                gdat.numbplan = int(gdat.litsvalu['numbdata'] * gdat.listvalu['fracplan'])
+                gdat.numbnois = gdat.listvalu['numbdata'] - gdat.numbplan
                 
-                gdat.indxtime = np.arange(gdat.numbtime)
-                gdat.indxdata = np.arange(gdat.numbdata)
-                gdat.indxlayr = np.arange(gdat.numblayr)
+                gdat.indxtime = np.arange(gdat.listvalu['numbtime'])
+                gdat.indxdata = np.arange(gdat.listvalu['numbdata'])
+                gdat.indxlayr = np.arange(gdat.listvalu['numblayr'])
 
                 # number of test data samples
-                gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
+                gdat.numbdatatest = int(gdat.listvalu['numbdata'] * gdat.fractest)
                 # number of training data samples
-                gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
+                gdat.numbdatatran = gdat.listvalu['numbdata'] - gdat.numbdatatest
                 # number of signal data samples
-                numbdataplan = int(gdat.numbdata * gdat.fracplan)
+                numbdataplan = int(gdat.listvalu['numbdata'] * gdat.listvalu['fracplan'])
                 
                 if datatype == 'here':
-                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.listvalu['numbtime'], dept=gdat.listvalu['dept'], nois=gdat.listvalu['nois'])
 
                 if datatype == 'ete6':
                     gdat.inpt, gdat.outp = exopmain.retr_ete6()
@@ -293,7 +304,7 @@ def expl( \
                 plt.close()
         
                 # divide the data set into training and test data sets
-                numbdatatest = int(gdat.fractest * gdat.numbdata)
+                numbdatatest = int(gdat.fractest * gdat.listvalu['numbdata'])
                 gdat.inpttest = gdat.inpt[:numbdatatest, :]
                 gdat.outptest = gdat.outp[:numbdatatest]
                 gdat.inpttran = gdat.inpt[numbdatatest:, :]
