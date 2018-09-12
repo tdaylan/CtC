@@ -34,7 +34,7 @@ class gdatstrt(object):
         self.numbepoc = 50
     
         # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 2
+        self.numbruns = 5
 
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
@@ -43,18 +43,22 @@ class gdatstrt(object):
         self.listvalu = {}
         ## generative parameters of mock data
         self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
-        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
+        # temp
+        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1])
         self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-        self.listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
+        self.listvalu['numbdata'] = np.array([1e2, 3e2, 1e4, 3e3, 1e4]).astype(int)
         self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
         ## hyperparameters
         self.listvalu['numbdatabtch'] = [16, 32, 128, 512, 1024]
         ### number of layers
-        self.listvalu['numblayr'] = [1, 2, 3, 4, 5]
+        # temp
+        self.listvalu['numblayr'] = [1, 2, 2, 4, 5]
         ### number of dimensions in each layer
-        self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
+        # temp
+        self.listvalu['numbdimslayr'] = [32, 64, 32, 256, 512]
         ### fraction of dropout in in each layer
-        self.listvalu['fracdrop'] = [0.25, 0.4, 0.5, 0.6, 0.75]
+        # temp
+        self.listvalu['fracdrop'] = [0.25, 0.4, 0., 0.6, 0.75]
         
         # list of strings holding the names of the variables
         self.liststrgvarb = self.listvalu.keys()
@@ -79,7 +83,6 @@ class gdatstrt(object):
         
         for o, strgvarb in enumerate(self.liststrgvarb):
             self.dictmetr[strgvarb] = np.empty((2, 3, self.numbruns, self.numbvalu[o]))
-        
 
     
     # trying to condense all class things into one __init__ so all methods can just be called here
@@ -140,11 +143,18 @@ class gdatstrt(object):
         loss = np.empty(self.numbepoc)
         numbepocchec = 5 # hard coded
         
-
         for y in self.indxepoc:
-            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=0)
+            #for k in range(self.numbdata):
+            #    if k < 100:
+            #        print self.inpt[k, :]
+            #        print self.outp[k]
+            #        print
+            #print 'self.dept'
+            #print self.dept
+            #raise Exception('')
+            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
-            indxepocloww = max(0, y- numbepocchec)
+            indxepocloww = max(0, y - numbepocchec)
             if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
                 print('Warning! The optimizer may not have converged.')
                 print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
@@ -160,21 +170,34 @@ class gdatstrt(object):
                     numbdatatemp = self.numbdatatest
 
                 outppred = (self.modl.predict(inpt) > 0.5).astype(int)
-                scor = self.modl.evaluate(inpt, outp, verbose=0)
                 matrconf = confusion_matrix(outp, outppred)
-
+                if matrconf.size == 1:
+                    print 'Warning!'
+                    print 'outp'
+                    print outp
+                    print 'outppred'
+                    print outppred
+                    print 'matrconf'
+                    print matrconf
+                    matrconftemp = np.copy(matrconf)
+                    matrconf = np.empty((2, 2))
+                    matrconf[0, 0] = matrconftemp
                 trne = matrconf[0, 0]
                 flpo = matrconf[0, 1]
                 flne = matrconf[1, 0]
                 trpo = matrconf[1, 1]
-
 
                 if float(trpo + flpo) > 0:
                     metr[y, r, 0] = trpo / float(trpo + flpo)
                 metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
                 if float(trpo + flne) > 0:
                     metr[y, r, 2] = trpo / float(trpo + flne)
-            return metr
+                
+                #print 'metr[y, r, :]'
+                #print metr[y, r, :]
+                #print
+
+        return metr
 
 
 def summgene(varb):
@@ -224,6 +247,12 @@ def expl( \
         print (dictdevi.name)
     """
     
+    print 'gdat.liststrgvarb'
+    print gdat.liststrgvarb
+    
+    # temp
+    gdat.maxmindxvarb = 10000
+
     # for each run
     for t in gdat.indxruns:
         
@@ -235,24 +264,28 @@ def expl( \
         # for each variable
         for o, strgvarb in enumerate(gdat.liststrgvarb): 
             
+            if o == gdat.maxmindxvarb:
+                break
+
             print ('Processing variable %s...' % strgvarb)
 
             # for each value
             for i in gdat.indxvalu[o]:
 
-                gdat.numbdata = gdat.listvalu['numbdata'][i]
-                gdat.numblayr = gdat.listvalu['numblayr'][i]
-                gdat.numbdatabtch = gdat.listvalu['numbdatabtch'][i]
-                gdat.dept = gdat.listvalu['dept'][i]
-                gdat.nois = gdat.listvalu['nois'][i]
-                gdat.numbdimslayr = gdat.listvalu['numbdimslayr'][i]
-                gdat.fracdrop = gdat.listvalu['fracdrop'][i]
-                gdat.numbtime = gdat.listvalu['numbtime'][i]
-                gdat.fracplan = gdat.listvalu['fracplan'][i]
+                for strgvarbtemp in gdat.liststrgvarb: 
+                    setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][gdat.numbvalu[o]/2])
+                setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
+                
+                for strgvarbtemp in gdat.liststrgvarb: 
+                    print strgvarbtemp
+                    print getattr(gdat, strgvarbtemp)
+
                 gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
                 gdat.numbnois = gdat.numbdata - gdat.numbplan
                 
-                gdat.indxlayr = range(gdat.numblayr)
+                gdat.indxtime = np.arange(gdat.numbtime)
+                gdat.indxdata = np.arange(gdat.numbdata)
+                gdat.indxlayr = np.arange(gdat.numblayr)
 
                 # number of test data samples
                 gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
@@ -260,13 +293,27 @@ def expl( \
                 gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
                 # number of signal data samples
                 numbdataplan = int(gdat.numbdata * gdat.fracplan)
-        
+                
                 if datatype == 'here':
-                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime)
+                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
 
                 if datatype == 'ete6':
                     gdat.inpt, gdat.outp = exopmain.retr_ete6()
-
+                    
+                # plot
+                figr, axis = plt.subplots() # figr unused
+                for k in gdat.indxdata:
+                    if k < 10:
+                        if gdat.outp[k] == 1:
+                            colr = 'r'
+                        else:
+                            colr = 'b'
+                        axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
+                plt.tight_layout()
+                path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
+                plt.savefig(path)
+                plt.close()
+        
                 # divide the data set into training and test data sets
                 numbdatatest = int(gdat.fractest * gdat.numbdata)
                 gdat.inpttest = gdat.inpt[:numbdatatest, :]
@@ -277,18 +324,21 @@ def expl( \
                 gdat.modl = Sequential()
 
                 # construct the neural net
-                # add a fully connected layer
+                # add the first fully connected layer
                 gdat.appdfcon(gdat.fracdrop)
                 
-                ## add a fully connected layer
-                gdat.appdfcon(gdat.fracdrop, strglayr='inte')
+                ## add other fully connected layers
+                if gdat.numblayr > 2:
+                    for k in range(gdat.numblayr - 2):
+                        gdat.appdfcon(gdat.fracdrop, strglayr='inte')
                 
-                ## final output layer
+                ## add the last output layer
                 gdat.appdfcon(gdat.fracdrop, strglayr='last')
                 
-                #gdat.modl.add(Dense(gdat.numbdims, input_dim=gdat.numbtime, activation='relu'))
-                gdat.modl.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
-                print gdat.modl.summary()
+                gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+                
+                #print gdat.modl.summary()
+                #print
 
                 # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                 # do the training for the specific value of the variable of interest
@@ -304,33 +354,32 @@ def expl( \
     alph = 0.5
     # plot the resulting metrics
     for o, strgvarb in enumerate(gdat.liststrgvarb): 
+        
+        if o == gdat.maxmindxvarb:
+            break
+
         for l, strgmetr in enumerate(gdat.liststrgmetr):
             figr, axis = plt.subplots() # figr unused
             
             for r in gdat.indxrtyp:
-                yerr = np.empty((2, gdat.numbvalu[o]))
+                yerr = np.zeros((2, gdat.numbvalu[o]))
                 if r == 0:
                     colr = 'b'
                 else:
                     colr = 'g'
                 
                 indx = []
-                ydat = np.empty(gdat.numbvalu[o])
+                ydat = np.zeros(gdat.numbvalu[o]) - 1.
                 for i in gdat.indxvalu[o]:
                     indx.append(np.where(gdat.dictmetr[strgvarb][r, l, :, i] != -1)[0])
-                    ydat[i] = np.mean(gdat.dictmetr[strgvarb][r, l, :, indx[i]], axis=0)
-                if len(indx) > 0:
-                    for i in gdat.indxvalu[o]:
+                    if indx[i].size > 0:
+                        ydat[i] = np.mean(gdat.dictmetr[strgvarb][r, l, indx[i], i], axis=0)
                         yerr[0, i] = ydat[i] - np.percentile(gdat.dictmetr[strgvarb][r, l, indx[i], i], 5.)
-                        yerr[1, i] = np.percentile(gdat.dictmetr[strgvarb][r, l, :, i], 95.) - ydat[i]
-                
-                    if r == 0:
-                        linestyl = '--' # unused
-                    else:
-                        linestyl = ''
+                        yerr[1, i] = np.percentile(gdat.dictmetr[strgvarb][r, l, indx[i], i], 95.) - ydat[i]
                 
                 temp, listcaps, temp = axis.errorbar(gdat.listvalu[strgvarb], ydat, yerr=yerr, label=gdat.listlablrtyp[r], capsize=10, marker='o', \
                                                                                     ls='', markersize=10, lw=3, alpha=alph, color=colr)
+                
                 for caps in listcaps:
                     caps.set_markeredgewidth(3)
             
@@ -357,22 +406,16 @@ def expl( \
             if strgvarb == 'numbdatabtch':
                 labl = '$N_{db}$'
         
-            if strgvarb == 'numbdimsfrst':
-                labl = '$N_{dens,1}$'
-            
-            if strgvarb == 'numbdimsseco':
-                labl = '$N_{dens,2}$'
+            if strgvarb == 'numbdimslayr':
+                labl = '$N_{dens}$'
         
-            if strgvarb == 'fracdropfrst':
-                labl = '$f_{d,1}$'
-        
-            if strgvarb == 'fracdropseco':
-                labl = '$f_{d,2}$'
+            if strgvarb == 'fracdrop':
+                labl = '$f_D$'
         
             axis.set_ylabel(gdat.listlablmetr[l]) 
             axis.set_xlabel(labl) 
             
-            if strgvarb in ['numbdata', 'numbtime', 'dept', 'nois', 'numbdimsfrst', 'numbdimsseco', 'numbdatabtch']:
+            if strgvarb in ['numbdata', 'numbtime', 'dept', 'nois', 'numbdimslayr', 'numbdatabtch']:
                 axis.set_xscale('log')
             plt.legend()
             plt.tight_layout()
