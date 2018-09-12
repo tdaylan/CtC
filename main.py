@@ -144,14 +144,6 @@ class gdatstrt(object):
         numbepocchec = 5 # hard coded
         
         for y in self.indxepoc:
-            #for k in range(self.numbdata):
-            #    if k < 100:
-            #        print self.inpt[k, :]
-            #        print self.outp[k]
-            #        print
-            #print 'self.dept'
-            #print self.dept
-            #raise Exception('')
             hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
@@ -172,13 +164,6 @@ class gdatstrt(object):
                 outppred = (self.modl.predict(inpt) > 0.5).astype(int)
                 matrconf = confusion_matrix(outp, outppred)
                 if matrconf.size == 1:
-                    print 'Warning!'
-                    print 'outp'
-                    print outp
-                    print 'outppred'
-                    print outppred
-                    print 'matrconf'
-                    print matrconf
                     matrconftemp = np.copy(matrconf)
                     matrconf = np.empty((2, 2))
                     matrconf[0, 0] = matrconftemp
@@ -193,10 +178,6 @@ class gdatstrt(object):
                 if float(trpo + flne) > 0:
                     metr[y, r, 2] = trpo / float(trpo + flne)
                 
-                #print 'metr[y, r, :]'
-                #print metr[y, r, :]
-                #print
-
         return metr
 
 
@@ -247,9 +228,6 @@ def expl( \
         print (dictdevi.name)
     """
     
-    print 'gdat.liststrgvarb'
-    print gdat.liststrgvarb
-    
     # temp
     gdat.maxmindxvarb = 10000
 
@@ -277,8 +255,8 @@ def expl( \
                 setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
                 
                 for strgvarbtemp in gdat.liststrgvarb: 
-                    print strgvarbtemp
-                    print getattr(gdat, strgvarbtemp)
+                    print (strgvarbtemp)
+                    print (getattr(gdat, strgvarbtemp))
 
                 gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
                 gdat.numbnois = gdat.numbdata - gdat.numbplan
@@ -337,9 +315,6 @@ def expl( \
                 
                 gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
                 
-                #print gdat.modl.summary()
-                #print
-
                 # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                 # do the training for the specific value of the variable of interest
                 metr = gdat.retr_metr(i, strgvarb)
