@@ -48,9 +48,9 @@ class gdatstrt(object):
         self.listvalu['numbdata'] = np.array([1e2, 3e2, 1e3, 3e3, 1e4]).astype(int)
         self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.6, 0.9]
         ## hyperparameters
-        self.listvalu['numbdatabtch'] = [32, 128, 512]
+        self.listvalu['numbdatabtch'] = [16, 32, 128, 512, 1024]
         ### number of layers
-        self.listvalu['numblayr'] = [1, 2, 3, 4]
+        self.listvalu['numblayr'] = [1, 2, 3, 4, 5]
         ### number of dimensions in each layer
         self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
         ### fraction of dropout in in each layer
@@ -83,37 +83,26 @@ class gdatstrt(object):
 
     
     # trying to condense all class things into one __init__ so all methods can just be called here
-    def appdfcon(self, drop=True, strglayr='init'):
+    def appdfcon(self, fracdrop, strglayr='init'):
         """
         Functionally can be added at any point in the model
 
-        drop: True if Dropout is desired in the model
+        fracdrop: fraction of drop-out
         strglayr: 'init', 'medi', 'finl'
         """
-        if strglayr:
-            # check to see if this is the last layer, if not, see how many layers precede this next layer
-            strglayr = len(self.modl.layers)
 
         if strglayr == 'init':
-            # if first layer:
-            self.modl.add(Dense(self.numbdims, input_dim=self.numbtime, activation='relu'))
-            
-            if drop:
-                self.modl.add(Dropout(self.fracdrop))
-
+            self.modl.add(Dense(self.numbdimslayr, input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'inte':
-            self.modl.add(Dense(self.numbdims, activation= 'relu'))
-            
-            if drop:
-                self.modl.add(Dropout(self.fracdrop))
-
+            self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
         elif strglayr == 'last':
             self.modl.add(Dense(1, activation='sigmoid'))
         
-        return None
+        if fracdrop > 0.:
+            self.modl.add(Dropout(self.fracdrop))
+        
 
-
-    def appdcon1(self, drop=True, strglayr=True):
+    def appdcon1(self, fracdrop, strglayr='init'):
         """
         Functionally can be added at any point in the model
 
@@ -121,31 +110,21 @@ class gdatstrt(object):
         strglayr: True unless last layer, at which point this var needs to be set to 'Last'
         This should not be the last layer!
         """
-        if strglayr != 'last':
-            # check to see if this is the last layer, if not, see how many layers precede this next layer
-            strglayr = len(self.modl.layers)
+        
         if strglayr == 'init':
-            # if first layer:
-            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime, activation='relu')) # should look into these inputs
-            
-            if drop:
-                self.modl.add(Dropout(self.fracdrop))
+            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
-            self.modl.add(Conv1D(self.numbdims, kernel_size=self.numbtime,  activation= 'relu')) # should look into these inputs
+            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, activation= 'relu'))
             
-            if drop:
-                self.modl.add(Dropout(self.fracdrop))
-
-        return None
+        if fracdrop > 0.:
+            self.modl.add(Dropout(self.fracdrop))
+        
 
 
     def retr_metr(self, indxvaluthis=None, strgvarbthis=None):     
         """
         Performance method
         """
-
-        self.modl.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
-        print self.modl.summary()
 
         # empt dict
         listvalutemp = {}
@@ -181,10 +160,8 @@ class gdatstrt(object):
                     numbdatatemp = self.numbdatatest
 
                 outppred = (self.modl.predict(inpt) > 0.5).astype(int)
-                score = self.modl.evaluate(inpt,outp, verpose=0)
-                matrconf = confusion_matrix(outp[:, 0], outppred[:, 0])
-
-
+                scor = self.modl.evaluate(inpt, outp, verbose=0)
+                matrconf = confusion_matrix(outp, outppred)
 
                 trne = matrconf[0, 0]
                 flpo = matrconf[0, 1]
@@ -300,15 +277,19 @@ def expl( \
                 gdat.modl = Sequential()
 
                 # construct the neural net
-                ## add a fully connected layer
-                gdat.appdfcon()
+                # add a fully connected layer
+                gdat.appdfcon(gdat.fracdrop)
                 
                 ## add a fully connected layer
-                gdat.appdfcon()
+                gdat.appdfcon(gdat.fracdrop, strglayr='inte')
                 
                 ## final output layer
-                gdat.appdfcon(strglayr='last')
+                gdat.appdfcon(gdat.fracdrop, strglayr='last')
                 
+                #gdat.modl.add(Dense(gdat.numbdims, input_dim=gdat.numbtime, activation='relu'))
+                gdat.modl.compile(loss='binary_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
+                print gdat.modl.summary()
+
                 # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                 # do the training for the specific value of the variable of interest
                 metr = gdat.retr_metr(i, strgvarb)
