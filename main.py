@@ -26,7 +26,7 @@ class gdatstrt(object):
     retr_metr: returns all metrics of the network
     """
     
-    def __init__(self, datatype='here'):
+    def __init__(self):
     
         # fraction of data samples that will be used to test the model
         self.fractest = 0.1
@@ -97,10 +97,10 @@ class gdatstrt(object):
         """
 
         if strglayr == 'init':
-            self.modl.add(Dense(self.numbdimslay, input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Dense(self.numbdimslayr, input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
             self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
-        elif strglayr == 'last':
+        elif strglayr == 'finl':
             self.modl.add(Dense(1, activation='sigmoid'))
         
         if fracdrop > 0.:
@@ -123,7 +123,6 @@ class gdatstrt(object):
         if fracdrop > 0.:
             self.modl.add(Dropout(fracdrop))
         
-
 
     def retr_metr(self, indxvaluthis=None, strgvarbthis=None):     
         """
@@ -166,7 +165,7 @@ class gdatstrt(object):
                 if float(trpo + flpo) > 0:
                     metr[y, r, 0] = trpo / float(trpo + flpo)
                 else:
-                    print 'No positive found...'
+                    print ('No positive found...')
                     #raise Exception('')
                 metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
                 if float(trpo + flne) > 0:
@@ -195,6 +194,12 @@ def expl( \
          # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
          zoomtype='locl', \
          datatype='here', \
+         numbdata=100,\
+         numbtime=20,\
+         fracplan=0.2,\
+         numblayr=2,\
+         numbdatabtch=128,\
+         numbdimslayr=1 # this variable is a mistake that I added for a function that no longer needs it, will fix ASAP -Jeremy
         ):
 
     '''
@@ -205,20 +210,16 @@ def expl( \
     # this can be wrapped in a function to allow for customization 
     # initialize the data here
     
-    gdat = gdatstrt(datatype=datatype)
-
-    # evaluate at the central point?
-    fracdropinpt = gdat.listvalu['fracdrop']
-
-    # add a fully connected layer
-    gdat.appdfcon(fracdropinpt[0], strglayr='init')
-    # add a fully connected layer
-    gdat.appdfcon(fracdropinpt[0], strglayr='medi')
-    # final output layer
-    gdat.appdfcon(0, strglayr='Last')
+    gdat = gdatstrt()
 
 
-
+    # these variables should probably be input as __init__() parameters... just for simplicity!
+    gdat.numbdata = numbdata
+    gdat.numbtime = numbtime
+    gdat.fracplan = fracplan
+    gdat.numblayr = numblayr
+    gdat.numbdatabtch = numbdatabtch
+    gdat.numbdimslayr = numbdimslayr
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     
@@ -262,9 +263,9 @@ def expl( \
                 
                 pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
                 # temp
-                if False and os.path.exists(pathsave):
+                if False and os.path.exists(pathsave): #i don't see the purpose to this line... it can't be True?
                     listhdun = ap.io.fits.open(pathsave)
-                    metr = listhdun[0].data 
+                    metr = listhdun[0]._data #CHECK THIS I JUST DID WHAT THE PYLINT RECOMMENDED
                 else:
                     for strgvarbtemp in gdat.liststrgvarb: 
                         setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][gdat.numbvalu[o]/2])
@@ -324,10 +325,10 @@ def expl( \
                     ## add other fully connected layers
                     if gdat.numblayr > 2:
                         for k in range(gdat.numblayr - 2):
-                            gdat.appdfcon(gdat.fracdrop, strglayr='inte')
+                            gdat.appdfcon(gdat.fracdrop, strglayr='medi')
                     
                     ## add the last output layer
-                    gdat.appdfcon(gdat.fracdrop, strglayr='last')
+                    gdat.appdfcon(gdat.fracdrop, strglayr='last') # do we do a fracdrop on the last layer?
                     
                     gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
                     
@@ -383,15 +384,14 @@ def expl( \
                     axis.plot(gdat.listvalu[strgvarb], gdat.dictmetr[strgvarb][r, l, t, :], marker='D', ls='', markersize=5, alpha=alph, color=colr)
             
             #axis.set_ylim([-0.1, 1.1])
-
             if strgvarb == 'numbtime':
                 labl = '$N_{time}$'
             
             if strgvarb == 'dept':
-                labl = r'$\delta$' # pylint told me that these needed an r prefix
+                labl = '$\delta$'
             
             if strgvarb == 'nois':
-                labl = r'$\sigma$' # pylint told me that these needed an r prefix
+                labl = '$\sigma$'
             
             if strgvarb == 'numbdata':
                 labl = '$N_{data}$'
