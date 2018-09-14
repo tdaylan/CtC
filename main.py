@@ -194,13 +194,7 @@ def expl( \
          # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
          zoomtype='locl', \
          datatype='here', \
-         numbdata=100,\
-         numbtime=20,\
-         fracplan=0.2,\
-         numblayr=2,\
-         numbdatabtch=128,\
-         numbdimslayr=1 # this variable is a mistake that I added for a function that no longer needs it, will fix ASAP -Jeremy
-        ):
+):
 
     '''
     Function to explore the effect of hyper-parameters (and data properties for mock data) on binary classification metrics
@@ -212,14 +206,6 @@ def expl( \
     
     gdat = gdatstrt()
 
-
-    # these variables should probably be input as __init__() parameters... just for simplicity!
-    gdat.numbdata = numbdata
-    gdat.numbtime = numbtime
-    gdat.fracplan = fracplan
-    gdat.numblayr = numblayr
-    gdat.numbdatabtch = numbdatabtch
-    gdat.numbdimslayr = numbdimslayr
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     
@@ -265,7 +251,7 @@ def expl( \
                 # temp
                 if False and os.path.exists(pathsave): #i don't see the purpose to this line... it can't be True?
                     listhdun = ap.io.fits.open(pathsave)
-                    metr = listhdun[0]._data #CHECK THIS I JUST DID WHAT THE PYLINT RECOMMENDED
+                    metr = listhdun[0].data
                 else:
                     for strgvarbtemp in gdat.liststrgvarb: 
                         setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][gdat.numbvalu[o]/2])
