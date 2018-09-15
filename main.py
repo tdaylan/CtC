@@ -32,14 +32,13 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 10
+        self.numbepoc = 20
     
         # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 3
+        self.numbruns = 7
 
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
-
 
         # a dictionary to hold the variable values for which the training will be repeated
         self.listvalu = {}
@@ -48,19 +47,16 @@ class gdatstrt(object):
         # temp
         self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1])
         self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-        self.listvalu['numbdata'] = np.array([3e1, 1e4, 3e4, 1e5, 3e5]).astype(int)
+        self.listvalu['numbdata'] = np.array([3e3, 1e4, 3e4, 1e5, 3e5]).astype(int)
         self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.7, 0.9]
         ## hyperparameters
         self.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
         ### number of layers
-        # temp
         self.listvalu['numblayr'] = [1, 2, 3, 4, 5]
         ### number of dimensions in each layer
-        # temp
         self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
         ### fraction of dropout in in each layer
-        # temp
-        self.listvalu['fracdrop'] = [0.25, 0.4, 0.5, 0.6, 0.75]
+        self.listvalu['fracdrop'] = [0., 0.15, 0.3, 0.45, 0.6]
         
         # list of strings holding the names of the variables
         self.liststrgvarb = self.listvalu.keys()
@@ -97,7 +93,7 @@ class gdatstrt(object):
         """
 
         if strglayr == 'init':
-            self.modl.add(Dense(self.numbdimslay, input_dim=self.numbtime, activation='relu'))
+            self.modl.add(Dense(self.numbdimslayr, input_dim=self.numbtime, activation='relu'))
         elif strglayr == 'medi':
             self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
         elif strglayr == 'last':
@@ -204,20 +200,17 @@ def expl( \
     # global object that will hold global variables
     # this can be wrapped in a function to allow for customization 
     # initialize the data here
-    
+
     gdat = gdatstrt(datatype=datatype)
-
-    # evaluate at the central point?
-    fracdropinpt = gdat.listvalu['fracdrop']
-
-    # add a fully connected layer
-    gdat.appdfcon(fracdropinpt[0], strglayr='init')
-    # add a fully connected layer
-    gdat.appdfcon(fracdropinpt[0], strglayr='medi')
-    # final output layer
-    gdat.appdfcon(0, strglayr='Last')
-
-
+    
+    # is this for the evalution at the central point?
+    #fracdropinpt = gdat.listvalu['fracdrop']
+    ## add a fully connected layer
+    #gdat.appdfcon(fracdropinpt[0], strglayr='init')
+    ## add a fully connected layer
+    #gdat.appdfcon(fracdropinpt[0], strglayr='medi')
+    ## final output layer
+    #gdat.appdfcon(0, strglayr='Last')
 
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
