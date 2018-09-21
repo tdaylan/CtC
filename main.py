@@ -130,6 +130,8 @@ class gdatstrt(object):
         numbepocchec = 5 # hard coded
         
         for y in self.indxepoc:
+            
+            print(self.modl.summary())
             hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
@@ -243,8 +245,7 @@ def expl( \
             for i in gdat.indxvalu[o]:
                 
                 pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
-                # temp
-                if False and os.path.exists(pathsave): #i don't see the purpose to this line... it can't be True?
+                if os.path.exists(pathsave):
                     listhdun = ap.io.fits.open(pathsave)
                     metr = listhdun[0].data
                 else:
@@ -309,7 +310,7 @@ def expl( \
                             gdat.appdfcon(gdat.fracdrop, strglayr='medi')
                     
                     ## add the last output layer
-                    gdat.appdfcon(gdat.fracdrop, strglayr='last') # do we do a fracdrop on the last layer?
+                    gdat.appdfcon(gdat.fracdrop, strglayr='finl') # do we do a fracdrop on the last layer?
                     
                     gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
                     
