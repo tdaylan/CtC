@@ -3,7 +3,8 @@ import numpy as np
 import datetime, os
 
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Conv1D
+from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten
+
 import tensorflow as tf
 
 import sklearn
@@ -69,7 +70,10 @@ class gdatstrt(object):
         for o, strgvarb in enumerate(self.liststrgvarb):
             self.numbvalu[o] = len(self.listvalu[strgvarb])
             self.indxvalu[o] = np.arange(self.numbvalu[o])
-        
+       
+        print 'self.numbvalu'
+        print self.numbvalu
+
         # dictionary to hold the metrics resulting from the runs
         self.dictmetr = {}
         self.liststrgmetr = ['prec', 'accu', 'reca']
@@ -103,7 +107,7 @@ class gdatstrt(object):
             self.modl.add(Dropout(fracdrop)) # do we want this as an input or from the object?
         
 
-    def appdcon1(self, fracdrop, strglayr='init', strgactv='relu'):
+    def appdcon1(self, strgactv='relu'):
         """
         Adds a 1D CNN layer to the network
         This should not be the last layer!
@@ -112,13 +116,9 @@ class gdatstrt(object):
         strglayr: 'init', 'medi', 'finl'
         """
         
-        if strglayr == 'init':
-            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, input_dim=self.numbtime, activation='relu'))
-        elif strglayr == 'medi':
-            self.modl.add(Conv1D(self.numbdimslayr, kernel_size=self.numbtime, activation= 'relu'))
-        if fracdrop > 0.:
-            self.modl.add(Dropout(fracdrop))
-        
+        self.modl.add(Conv1D(64, kernel_size=3, input_shape=(self.numbtime, 1), activation='relu'))
+        self.modl.add(MaxPooling1D(pool_size=2, strides=1))
+        self.modl.add(Flatten())
 
     def retr_metr(self, indxvaluthis=None, strgvarbthis=None):     
         """
@@ -132,6 +132,12 @@ class gdatstrt(object):
         for y in self.indxepoc:
             
             print(self.modl.summary())
+            print 'self.inpt'
+            print self.inpt.shape
+            
+            self.inpt = self.inpt[:, :, None]
+            print 'self.inpt'
+            print self.inpt.shape
             hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
@@ -149,6 +155,7 @@ class gdatstrt(object):
                     outp = self.outptest
                     numbdatatemp = self.numbdatatest
 
+                inpt = inpt[:, :, None]
                 outppred = (self.modl.predict(inpt) > 0.5).astype(int)
                 matrconf = confusion_matrix(outp, outppred)
                 if matrconf.size == 1:
@@ -187,7 +194,7 @@ def summgene(varb):
 
 def expl( \
          # string indicating the model
-         strguser='tansu', \
+         strguser='tday', \
          strgtopo='fcon', \
          # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
          zoomtype='locl', \
@@ -209,7 +216,7 @@ def expl( \
     print ('CtC explorer initialized at %s.' % strgtimestmp)
     
     ## path where plots will be generated
-    pathplot = os.environ['TDGU_DATA_PATH'] + '/nnet_ssupgadn/'
+    pathplot = os.environ['TDGU_DATA_PATH'] + '/'
     
     print ('Will generate plots in %s' % pathplot)
     
@@ -245,12 +252,14 @@ def expl( \
             for i in gdat.indxvalu[o]:
                 
                 pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
-                if os.path.exists(pathsave):
+                # temp
+                if False and os.path.exists(pathsave):
+                    print 'Reading %s...' % pathsave
                     listhdun = ap.io.fits.open(pathsave)
                     metr = listhdun[0].data
                 else:
                     for strgvarbtemp in gdat.liststrgvarb: 
-                        setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][gdat.numbvalu[o]/2])
+                        setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][int(gdat.numbvalu[o]/2)])
                     setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
                     
                     for strgvarbtemp in gdat.liststrgvarb: 
@@ -276,7 +285,12 @@ def expl( \
 
                     if datatype == 'ete6':
                         gdat.inpt, gdat.outp = exopmain.retr_ete6()
-                        
+                    
+                    print 'Beginning'
+                    print 'gdat.inpt'
+                    print gdat.inpt.shape
+                    print
+
                     # plot
                     figr, axis = plt.subplots() # figr unused
                     for k in gdat.indxdata:
@@ -301,6 +315,9 @@ def expl( \
                     gdat.modl = Sequential()
 
                     # construct the neural net
+                    # add a CNN
+                    gdat.appdcon1()
+                    
                     # add the first fully connected layer
                     gdat.appdfcon(gdat.fracdrop)
                     
