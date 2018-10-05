@@ -71,8 +71,7 @@ class gdatstrt(object):
             self.numbvalu[o] = len(self.listvalu[strgvarb])
             self.indxvalu[o] = np.arange(self.numbvalu[o])
        
-        print 'self.numbvalu'
-        print self.numbvalu
+        print ('self.numbvalu\n', self.numbvalu)
 
         # dictionary to hold the metrics resulting from the runs
         self.dictmetr = {}
@@ -132,12 +131,11 @@ class gdatstrt(object):
         for y in self.indxepoc:
             
             print(self.modl.summary())
-            print 'self.inpt'
-            print self.inpt.shape
+            print('self.inpt\n', self.inpt.shape)
             
             self.inpt = self.inpt[:, :, None]
-            print 'self.inpt'
-            print self.inpt.shape
+            print('self.inpt\n', self.inpt.shape)
+            
             hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
@@ -254,7 +252,7 @@ def expl( \
                 pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
                 # temp
                 if False and os.path.exists(pathsave):
-                    print 'Reading %s...' % pathsave
+                    print ('Reading %s...' % pathsave)
                     listhdun = ap.io.fits.open(pathsave)
                     metr = listhdun[0].data
                 else:
@@ -286,10 +284,9 @@ def expl( \
                     if datatype == 'ete6':
                         gdat.inpt, gdat.outp = exopmain.retr_ete6()
                     
-                    print 'Beginning'
-                    print 'gdat.inpt'
-                    print gdat.inpt.shape
-                    print
+                    print ('Beginning')
+                    print ('gdat.inpt\n', gdat.inpt.shape)
+                    
 
                     # plot
                     figr, axis = plt.subplots() # figr unused
