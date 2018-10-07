@@ -33,10 +33,10 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 20
+        self.numbepoc = 10
     
         # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 7
+        self.numbruns = 10
 
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
@@ -70,8 +70,7 @@ class gdatstrt(object):
         for o, strgvarb in enumerate(self.liststrgvarb):
             self.numbvalu[o] = len(self.listvalu[strgvarb])
             self.indxvalu[o] = np.arange(self.numbvalu[o])
-       
-        print ('self.numbvalu\n', self.numbvalu)
+    
 
         # dictionary to hold the metrics resulting from the runs
         self.dictmetr = {}
@@ -133,10 +132,10 @@ class gdatstrt(object):
             print(self.modl.summary())
             print('self.inpt\n', self.inpt.shape)
             
-            self.inpt = self.inpt[:, :, None]
-            print('self.inpt\n', self.inpt.shape)
-            
-            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
+            histinpt = self.inpt[:, :, None]    # instead of updating self.inpt, which makes the size increase per call
+            print('histinpt\n', histinpt.shape)
+
+            hist = self.modl.fit(histinpt, self.outp, epochs=self.numbepoc, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
             if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
@@ -228,7 +227,7 @@ def expl( \
     """
     
     # temp
-    gdat.maxmindxvarb = 10000
+    gdat.maxmindxvarb = 10
 
     # for each run
     for t in gdat.indxruns:
@@ -298,6 +297,10 @@ def expl( \
                                 colr = 'b'
                             axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
                     plt.tight_layout()
+                    plt.xlabel('time')
+                    plt.ylabel('data-input')
+                    plt.title('input vs time')
+                    plt.legend()
                     path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
                     plt.savefig(path)
                     plt.close()
@@ -409,8 +412,13 @@ def expl( \
             
             if strgvarb in ['numbdata', 'numbtime', 'dept', 'nois', 'numbdimslayr', 'numbdatabtch']:
                 axis.set_xscale('log')
+
             plt.legend()
             plt.tight_layout()
+
+            plt.xlabel(labl)
+            plt.ylabel(gdat.listlablmetr[l])
+
             path = pathplot + strgvarb + strgmetr + '_' + strgtimestmp + '.pdf' 
             plt.savefig(path)
             plt.close()
