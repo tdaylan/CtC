@@ -198,7 +198,7 @@ def expl( \
          strgtopo='fcon', \
          # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
          zoomtype='locl', \
-         datatype='here', \
+         datatype='ete6', \
 ):
 
     '''
