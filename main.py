@@ -33,10 +33,10 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 20
+        self.numbepoc = 1
     
         # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 7
+        self.numbruns = 10
 
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
@@ -46,10 +46,14 @@ class gdatstrt(object):
         ## generative parameters of mock data
         self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
         # temp
-        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1])
-        self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-        self.listvalu['numbdata'] = np.array([3e3, 1e4, 3e4, 1e5, 3e5]).astype(int)
-        self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.7, 0.9]
+        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
+
+        self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
+
+        self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
+
+        self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N
+
         ## hyperparameters
         self.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
         ### number of layers
@@ -70,9 +74,7 @@ class gdatstrt(object):
         for o, strgvarb in enumerate(self.liststrgvarb):
             self.numbvalu[o] = len(self.listvalu[strgvarb])
             self.indxvalu[o] = np.arange(self.numbvalu[o])
-       
-        print 'self.numbvalu'
-        print self.numbvalu
+    
 
         # dictionary to hold the metrics resulting from the runs
         self.dictmetr = {}
@@ -125,20 +127,22 @@ class gdatstrt(object):
         Performance method
         """
 
-        metr = np.zeros((self.numbepoc, 2, 3)) - 1
+        metr = np.zeros((self.numbepoc, 2, 3 )) - 1 # element 4 is area under the curve
+        """, 10"""
+        # trapezoidal rule to find the area under the curve from recall vs precision
+
         loss = np.empty(self.numbepoc)
         numbepocchec = 5 # hard coded
         
         for y in self.indxepoc:
             
             print(self.modl.summary())
-            print 'self.inpt'
-            print self.inpt.shape
+            print('self.inpt\n', self.inpt.shape)
             
-            self.inpt = self.inpt[:, :, None]
-            print 'self.inpt'
-            print self.inpt.shape
-            hist = self.modl.fit(self.inpt, self.outp, epochs=1, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
+            histinpt = self.inpt[:, :, None]    # instead of updating self.inpt, which makes the size increase per call
+            print('histinpt\n', histinpt.shape)
+
+            hist = self.modl.fit(histinpt, self.outp, epochs=self.numbepoc, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
             if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
@@ -156,7 +160,7 @@ class gdatstrt(object):
                     numbdatatemp = self.numbdatatest
 
                 inpt = inpt[:, :, None]
-                outppred = (self.modl.predict(inpt) > 0.5).astype(int)
+                outppred = (self.modl.predict(inpt) > 0.5).astype(int) # this is threshold run for different values here
                 matrconf = confusion_matrix(outp, outppred)
                 if matrconf.size == 1:
                     matrconftemp = np.copy(matrconf)
@@ -168,13 +172,13 @@ class gdatstrt(object):
                 trpo = matrconf[1, 1]
 
                 if float(trpo + flpo) > 0:
-                    metr[y, r, 0] = trpo / float(trpo + flpo)
+                    metr[y, r, 0] = trpo / float(trpo + flpo) # precision
                 else:
                     print ('No positive found...')
                     #raise Exception('')
-                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
+                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne) # accuracy
                 if float(trpo + flne) > 0:
-                    metr[y, r, 2] = trpo / float(trpo + flne)
+                    metr[y, r, 2] = trpo / float(trpo + flne) # recall
                 else:
                     raise Exception('')
                 
@@ -230,7 +234,7 @@ def expl( \
     """
     
     # temp
-    gdat.maxmindxvarb = 10000
+    gdat.maxmindxvarb = 10
 
     # for each run
     for t in gdat.indxruns:
@@ -254,7 +258,7 @@ def expl( \
                 pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
                 # temp
                 if False and os.path.exists(pathsave):
-                    print 'Reading %s...' % pathsave
+                    print ('Reading %s...' % pathsave)
                     listhdun = ap.io.fits.open(pathsave)
                     metr = listhdun[0].data
                 else:
@@ -286,10 +290,9 @@ def expl( \
                     if datatype == 'ete6':
                         gdat.inpt, gdat.outp = exopmain.retr_ete6()
                     
-                    print 'Beginning'
-                    print 'gdat.inpt'
-                    print gdat.inpt.shape
-                    print
+                    print ('Beginning')
+                    print ('gdat.inpt\n', gdat.inpt.shape)
+                    
 
                     # plot
                     figr, axis = plt.subplots() # figr unused
@@ -301,6 +304,10 @@ def expl( \
                                 colr = 'b'
                             axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
                     plt.tight_layout()
+                    plt.xlabel('time')
+                    plt.ylabel('data-input')
+                    plt.title('input vs time')
+                    plt.legend()
                     path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
                     plt.savefig(path)
                     plt.close()
@@ -334,7 +341,7 @@ def expl( \
                     # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                     # do the training for the specific value of the variable of interest
                     metr = gdat.retr_metr(i, strgvarb)
-                    
+
                     # save to the disk
                     hdun = ap.io.fits.PrimaryHDU(metr)
                     listhdun = ap.io.fits.HDUList([hdun])
@@ -412,8 +419,13 @@ def expl( \
             
             if strgvarb in ['numbdata', 'numbtime', 'dept', 'nois', 'numbdimslayr', 'numbdatabtch']:
                 axis.set_xscale('log')
+
             plt.legend()
             plt.tight_layout()
+
+            plt.xlabel(labl)
+            plt.ylabel(gdat.listlablmetr[l])
+
             path = pathplot + strgvarb + strgmetr + '_' + strgtimestmp + '.pdf' 
             plt.savefig(path)
             plt.close()
