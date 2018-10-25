@@ -33,7 +33,7 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 10
+        self.numbepoc = 1
     
         # number of runs for each configuration in order to determine the statistical uncertainty
         self.numbruns = 10
@@ -46,10 +46,14 @@ class gdatstrt(object):
         ## generative parameters of mock data
         self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
         # temp
-        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1])
-        self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1])
-        self.listvalu['numbdata'] = np.array([3e3, 1e4, 3e4, 1e5, 3e5]).astype(int)
-        self.listvalu['fracplan'] = [0.1, 0.3, 0.5, 0.7, 0.9]
+        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
+
+        self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
+
+        self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
+
+        self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N
+
         ## hyperparameters
         self.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
         ### number of layers
@@ -123,7 +127,10 @@ class gdatstrt(object):
         Performance method
         """
 
-        metr = np.zeros((self.numbepoc, 2, 3)) - 1
+        metr = np.zeros((self.numbepoc, 2, 3 )) - 1 # element 4 is area under the curve
+        """, 10"""
+        # trapezoidal rule to find the area under the curve from recall vs precision
+
         loss = np.empty(self.numbepoc)
         numbepocchec = 5 # hard coded
         
@@ -153,7 +160,7 @@ class gdatstrt(object):
                     numbdatatemp = self.numbdatatest
 
                 inpt = inpt[:, :, None]
-                outppred = (self.modl.predict(inpt) > 0.5).astype(int)
+                outppred = (self.modl.predict(inpt) > 0.5).astype(int) # this is threshold run for different values here
                 matrconf = confusion_matrix(outp, outppred)
                 if matrconf.size == 1:
                     matrconftemp = np.copy(matrconf)
@@ -165,13 +172,13 @@ class gdatstrt(object):
                 trpo = matrconf[1, 1]
 
                 if float(trpo + flpo) > 0:
-                    metr[y, r, 0] = trpo / float(trpo + flpo)
+                    metr[y, r, 0] = trpo / float(trpo + flpo) # precision
                 else:
                     print ('No positive found...')
                     #raise Exception('')
-                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne)
+                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne) # accuracy
                 if float(trpo + flne) > 0:
-                    metr[y, r, 2] = trpo / float(trpo + flne)
+                    metr[y, r, 2] = trpo / float(trpo + flne) # recall
                 else:
                     raise Exception('')
                 
@@ -334,7 +341,7 @@ def expl( \
                     # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                     # do the training for the specific value of the variable of interest
                     metr = gdat.retr_metr(i, strgvarb)
-                    
+
                     # save to the disk
                     hdun = ap.io.fits.PrimaryHDU(metr)
                     listhdun = ap.io.fits.HDUList([hdun])
