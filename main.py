@@ -117,7 +117,7 @@ class bind():
 
 def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='locl'):
     
-    timefold = ((time - epoc) / peri) % 1. + 0.25
+    timefold = ((time - epoc) / peri + 0.25) % 1.
 
     if zoomtype == 'glob':
         minmtimefold = 0.
@@ -126,11 +126,12 @@ def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='locl'):
         minmtimefold = 0.15
         maxmtimefold = 0.35
     binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
-    np.histogram(timefold, bins=binstimefold)    
     indxtime = np.arange(numbtime)
     fluxavgd = np.empty(numbtime)
     print 'binstimefold'
     print binstimefold
+    print 'timefold'
+    print timefold
     for k in indxtime:
         print 'k'
         print k
