@@ -115,6 +115,7 @@ class bind():
         return np.asarray(final)
 
 
+
 def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='locl'):
     
     timefold = ((time - epoc) / peri + 0.25) % 1.
