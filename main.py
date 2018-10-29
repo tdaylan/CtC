@@ -19,7 +19,8 @@ import exop
 from exop import main as exopmain
 
 class bind():
-    
+   
+
     def __init__(self, data, period):
         """ 
         Allows raw data to be passed in, folded over itself, and binned
