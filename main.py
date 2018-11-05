@@ -120,7 +120,7 @@ class bind():
 def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='locl'):
     
     timefold = ((time - epoc) / peri + 0.25) % 1.
-
+    
     if zoomtype == 'glob':
         minmtimefold = 0.
         maxmtimefold = 1.
@@ -130,27 +130,12 @@ def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='locl'):
     binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
     indxtime = np.arange(numbtime)
     fluxavgd = np.empty(numbtime)
-    print 'binstimefold'
-    print binstimefold
-    print 'timefold'
-    print timefold
     for k in indxtime:
-        print 'k'
-        print k
         indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
-        print 'indx'
-        print indx
         fluxavgd[k] = np.mean(flux[indx])
 
     return fluxavgd
 
-
-flux = np.random.rand(1000)
-time = np.linspace(100., 200., 1000)
-fluxavgd = binn_lcur(10, time, flux, 10., 105.)
-print 'fluxavgd'
-print fluxavgd
-raise Exception('')
 
 class gdatstrt(object):
     
@@ -167,7 +152,7 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 1
+        self.numbepoc = 20
     
         # number of runs for each configuration in order to determine the statistical uncertainty
         self.numbruns = 10
@@ -182,9 +167,12 @@ class gdatstrt(object):
         # temp
         self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
 
+        self.listvalu['zoomtype'] = ['locl', 'glob']
+        
         self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
 
-        self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
+        #self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
+        self.listvalu['numbdata'] = np.array([3e3, 1e4 , 300, 1e5, 3e5]).astype(int)
 
         self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N
 
@@ -209,7 +197,6 @@ class gdatstrt(object):
             self.numbvalu[o] = len(self.listvalu[strgvarb])
             self.indxvalu[o] = np.arange(self.numbvalu[o])
     
-
         # dictionary to hold the metrics resulting from the runs
         self.dictmetr = {}
         self.liststrgmetr = ['prec', 'accu', 'reca']
@@ -268,14 +255,9 @@ class gdatstrt(object):
         loss = np.empty(self.numbepoc)
         numbepocchec = 5 # hard coded
         
+        print(self.modl.summary())
         for y in self.indxepoc:
-            
-            print(self.modl.summary())
-            print('self.inpt\n', self.inpt.shape)
-            
             histinpt = self.inpt[:, :, None]    # instead of updating self.inpt, which makes the size increase per call
-            print('histinpt\n', histinpt.shape)
-
             hist = self.modl.fit(histinpt, self.outp, epochs=self.numbepoc, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
             loss[y] = hist.history['loss'][0]
             indxepocloww = max(0, y - numbepocchec)
@@ -336,6 +318,7 @@ def expl( \
          strgtopo='fcon', \
          # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
          zoomtype='locl', \
+         phastype='fold', \
          datatype='ete6', \
 ):
 
@@ -347,6 +330,8 @@ def expl( \
     # this can be wrapped in a function to allow for customization 
     # initialize the data here
     gdat = gdatstrt()
+    
+    gdat.phastype = phastype
 
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -354,8 +339,8 @@ def expl( \
     print ('CtC explorer initialized at %s.' % strgtimestmp)
     
     ## path where plots will be generated
-    pathplot = os.environ['TDGU_DATA_PATH'] + '/'
-    
+    pathplot = os.environ['CTHC_DATA_PATH'] + '/exop/'
+    os.system('mkdir -p %s' % pathplot)
     print ('Will generate plots in %s' % pathplot)
     
     """"
@@ -367,6 +352,9 @@ def expl( \
         print (dictdevi.name)
     """
     
+    gdat.numbtimebins = 100
+    gdat.indxtimebins = np.arange(gdat.numbtimebins)
+
     # temp
     gdat.maxmindxvarb = 10
 
@@ -396,9 +384,15 @@ def expl( \
                     listhdun = ap.io.fits.open(pathsave)
                     metr = listhdun[0].data
                 else:
-                    for strgvarbtemp in gdat.liststrgvarb: 
-                        setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][int(gdat.numbvalu[o]/2)])
+                    for strgvarbtemp in gdat.liststrgvarb:
+                        indx = int(len(gdat.listvalu[strgvarbtemp]) / 2)
+                        setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][indx])
                     setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
+                    
+                    if isinstance(gdat.listvalu[strgvarb][i], str):
+                        print('Value: ' + gdat.listvalu[strgvarb][i])
+                    else:
+                        print('Value: %g' % gdat.listvalu[strgvarb][i])
                     
                     for strgvarbtemp in gdat.liststrgvarb: 
                         print (strgvarbtemp)
@@ -419,30 +413,66 @@ def expl( \
                     numbdataplan = int(gdat.numbdata * gdat.fracplan)
                     
                     if datatype == 'here':
-                        gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+                        gdat.inptraww, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, \
+                                numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
 
                     if datatype == 'ete6':
-                        gdat.inpt, gdat.outp = exopmain.retr_ete6()
+                        print 'gdat.numbdata'
+                        print gdat.numbdata
+                        gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, numbdata=gdat.numbdata, nois=gdat.nois)
                     
-                    print ('Beginning')
-                    print ('gdat.inpt\n', gdat.inpt.shape)
-                    
+                    if gdat.phastype == 'raww':
+                        gdat.inpt = gdat.inptraww
+
+                    if gdat.phastype == 'fold':
+                        pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
+                        if not os.path.exists(pathsavefold):
+                            cntr = 0
+                            gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                            for k in gdat.indxdata:
+                                numbperi = gdat.peri[cntr].size
+                                indxperi = np.arange(numbperi)
+                                # temp -- only uses the first period
+                                print 'k'
+                                print k
+                                print 'gdat.inptfold'
+                                summgene(gdat.inptfold)
+                                print 'gdat.inptraww'
+                                summgene(gdat.inptraww)
+                                print 'gdat.peri[k]'
+                                print gdat.peri[k]
+                                print
+
+                                gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
+                                                                                                                                    zoomtype=gdat.zoomtype)
+                        
+                            print 'Writing to %s...' % pathsavefold
+                            np.savetxt(pathsavefold, gdat.inptfold)
+                        else:
+                            print 'Reading from %s...' % pathsavefold
+                            gdat.inptfold = np.loadtxt(pathsavefold)
+                        gdat.inpt = gdat.inptfold
 
                     # plot
-                    figr, axis = plt.subplots() # figr unused
+                    figr, axis = plt.subplots()
                     for k in gdat.indxdata:
                         if k < 10:
                             if gdat.outp[k] == 1:
                                 colr = 'r'
                             else:
                                 colr = 'b'
-                            axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
+                            if gdat.phastype == 'raww':
+                                indx = gdat.indxtime
+                            if gdat.phastype == 'fold':
+                                indx = gdat.indxtimebins
+                            axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
                     plt.tight_layout()
                     plt.xlabel('time')
                     plt.ylabel('data-input')
                     plt.title('input vs time')
                     plt.legend()
                     path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
+                    print 'Writing to %s...' % path
                     plt.savefig(path)
                     plt.close()
         
@@ -480,6 +510,12 @@ def expl( \
                     hdun = ap.io.fits.PrimaryHDU(metr)
                     listhdun = ap.io.fits.HDUList([hdun])
                     listhdun.writeto(pathsave, overwrite=True)
+                    
+                    print('')
+                    print('')
+                    print('')
+                    print('')
+
 
                 gdat.dictmetr[strgvarb][0, 0, t, i] = metr[-1, 0, 0]
                 gdat.dictmetr[strgvarb][1, 0, t, i] = metr[-1, 1, 0]
