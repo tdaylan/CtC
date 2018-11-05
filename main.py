@@ -394,6 +394,7 @@ def expl( \
                     else:
                         print('Value: %g' % gdat.listvalu[strgvarb][i])
                     
+                    
                     for strgvarbtemp in gdat.liststrgvarb: 
                         print (strgvarbtemp)
                         print (getattr(gdat, strgvarbtemp))
