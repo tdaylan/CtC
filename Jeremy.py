@@ -162,7 +162,7 @@ def exonet():
 
     return modlfinl
 
-def reduced(loclinpt, globlinpt):
+def reduced():
     loclinpt, globlinpt = 201, 2001 # hard coded for now
     localinput = Input(shape=(int(loclinpt),), dtype='float32', name='localinput') 
 
@@ -514,10 +514,7 @@ def vary_one(dataclass, strgvarbChng, modelfunc, datatype='here', zoomType='loca
 
         for t in range(len(gdat.indxruns)):
  
-            try:
-                gdat.modl = modelfunc(gdat, )
-            else:
-                print('wrong function, need different model')
+            gdat.modl = modelfunc(gdat, )
             # gdat.modl.summary()
             prec, recal = thresh(gdat, points=200)
 
@@ -739,7 +736,7 @@ def vary_one_paper( dataclass, \
                     gdat.inptfold = np.loadtxt(pathsavefold)
                 gdat.inpt = gdat.inptfold
 
-            elif gdat.phastype = 'both':
+            elif gdat.phastype == 'both':
                 gdat.inptR = gdat.inptraww
 
                 pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
@@ -833,16 +830,18 @@ def vary_one_paper( dataclass, \
 
         for t in range(len(gdat.indxruns)):
  
-            try:
-                gdat.modl = modelfunc()
-            else:
-                print('wrong function, need different model')
+            gdat.modl = modelfunc()
+
             # gdat.modl.summary()
 
             prec, recal = thresh_paper(gdat, points=200)
 
+            if gdat.phastype == 'both':
+                y_pred = gdat.modl.predict([gdat.inpttestF, gdat.inpttestR])
 
-            y_pred = gdat.modl.predict(gdat.inpttest)
+            else:
+                y_pred = gdat.modl.predict(gdat.inpttest)
+
             y_real = gdat.outptest
             auc = roc_auc_score(y_real, y_pred)
 
@@ -870,7 +869,7 @@ def vary_one_paper( dataclass, \
             plt.close()
 
 # to vary thresholds on a multi-input model
-def thresh(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
+def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
     
     pointsX = []
     pointsY = []
@@ -879,23 +878,45 @@ def thresh(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
     
     for y in dataclass.indxepoc:
         
-        modelinst.fit(dataclass.inpt, dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
+        if dataclass.phastype == 'both':
+            modelinst.fit([dataclass.inptF, dataclass.inptR], dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
+        else: 
+            modelinst.fit(dataclass.inpt, dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
         
         for r in dataclass.indxrtyp:
-            if r==0:
-                inpt = dataclass.inpttran
-                outp = dataclass.outptran
+            if dataclass.phastype == 'both':
+                if r==0:
+                    inptF = dataclass.inpttranF
+                    inptR = dataclass.inpttranR
+                    outp = dataclass.outptran
+
+                else:
+                    inptF = dataclass.inpttestF
+                    inptR = dataclass.inpttestR
+                    outp = dataclass.outptest
+
+                inptF = inptF[:, :]
+                inptR = inptR[:, :]
+
             else:
-                inpt = dataclass.inpttest
-                outp = dataclass.outptest
+                if r==0:
+                    inpt = dataclass.inpttran
+                    outp = dataclass.outptran
 
-            inpt = inpt[:, :]
+                else:
+                    inpt = dataclass.inpttest
+                    outp = dataclass.outptest
 
+                inpt = inpt[:, :]
              
             for i in thresholds:
                 
+                if dataclass.phastype == 'both':
+                    outppred = (modelinst.predict([inptF, inptR]) > i).astype(int)
 
-                outppred = (modelinst.predict(inpt) > i).astype(int)
+                else:
+                    outppred = (modelinst.predict(inpt) > i).astype(int)
+                
                 matrconf = confusion_matrix(outp, outppred)
 
                 if matrconf.size == 1:
@@ -930,3 +951,5 @@ def thresh(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
                     pointsX.append(Precision)
                     pointsY.append(Recall)
     return pointsX, pointsY
+
+
