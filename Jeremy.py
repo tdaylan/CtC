@@ -102,45 +102,45 @@ papergloblinpt = 2001    # input shape from paper
 
 def exonet():
     loclinpt, globlinpt = 201, 2001 # hard coded for now
-    localinput = Input(shape=(int(loclinpt),), dtype='float32', name='localinput') 
+    localinput = Input(shape=(int(loclinpt),1), dtype='float32', name='localinput') 
 
-    x = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(localinput)
-    x = Conv1D(5, 16, activation='relu')(x)
+    x = Conv1D(kernel_size=5, filters=16, activation='relu', input_shape=(loclinpt,1))(localinput)
+    x = Conv1D(kernel_size=5, filters=16, activation='relu')(x)
 
-    x = MaxPooling1D(pool_size=7, strides=2)(x)
+    x = MaxPooling1D(strides=7, pool_size=2)(x)
 
-    x = Conv1D(5, 32, activation='relu')(x)
-    x = Conv1D(5, 32, activation='relu')(x)
+    x = Conv1D(kernel_size=5, filters=32, activation='relu')(x)
+    x = Conv1D(kernel_size=5, filters=32, activation='relu')(x)
 
-    x = MaxPooling1D(pool_size=7, strides=2)(x)
+    x = MaxPooling1D(strides=7, pool_size=2)(x)
 
     # -----------------------------------------------------------------------------
-    globalinput = Input(shape=(int(globlinpt),), dtype='float32', name='globalinput')
+    globalinput = Input(shape=(int(globlinpt),1), dtype='float32', name='globalinput')
 
-    y = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(globalinput)
-    y = Conv1D(5, 16, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=16, activation='relu', input_shape=(globlinpt,1))(globalinput)
+    y = Conv1D(kernel_size=5, filters=16, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(strides=5, pool_size=2)(y)
 
-    y = Conv1D(5, 32, activation='relu')(y)
-    y = Conv1D(5, 32, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=32, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=32, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(strides=5, pool_size=2)(y)
 
-    y = Conv1D(5, 64, activation='relu')(y)
-    y = Conv1D(5, 64, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=64, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=64, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(strides=5, pool_size=2)(y)
 
-    y = Conv1D(5, 128, activation='relu')(y)
-    y = Conv1D(5, 128, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=128, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=128, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(strides=5, pool_size=2)(y)
 
-    y = Conv1D(5, 256, activation='relu')(y)
-    y = Conv1D(5, 256, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=256, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=256, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(strides=5, pool_size=2)(y)
 
     # ------------------------------------------------------------------------------
     z = keras.layers.concatenate([x, y])
@@ -164,29 +164,29 @@ def exonet():
 
 def reduced():
     loclinpt, globlinpt = 201, 2001 # hard coded for now
-    localinput = Input(shape=(int(loclinpt),), dtype='float32', name='localinput') 
+    localinput = Input(shape=(int(loclinpt),1), dtype='float32', name='localinput') 
 
-    x = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(localinput)
+    x = Conv1D(kernel_size=5, filters=16, activation='relu', input_shape=(loclinpt,1))(localinput)
 
     x = MaxPooling1D(pool_size=2, strides=2)(x)
 
-    x = Conv1D(5, 16, activation='relu')(x)
+    x = Conv1D(kernel_size=5, filters=16, activation='relu')(x)
 
 
     # x = MaxPooling1D()(x)
 
     # -----------------------------------------------------------------------------
-    globalinput = Input(shape=(int(globlinpt),), dtype='float32', name='globalinput')
+    globalinput = Input(shape=(int(globlinpt),1), dtype='float32', name='globalinput')
 
-    y = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(globalinput)
-
-    y = MaxPooling1D(pool_size=2, strides=2)(y)
-
-    y = Conv1D(5, 16, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=16, activation='relu', input_shape=(globlinpt,1))(globalinput)
 
     y = MaxPooling1D(pool_size=2, strides=2)(y)
 
-    y = Conv1D(5, 32, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=16, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=2, strides=2)(y)
+
+    y = Conv1D(kernel_size=5, filters=32, activation='relu')(y)
 
     # y = MaxPooling1D()(y)
 
@@ -642,14 +642,15 @@ def vary_one_paper( dataclass, \
                     strgvarbChng, \
                     modelfunc, \
                     datatype='here', \
-                    zoomType='local', \
+                    zoomType='locl', \
                     saveinpt=False, \
-                    phastype='fold'):
+                    phastype='both'):
     
     gdat = dataclass
 
     gdat.phastype = phastype
-    
+ 
+
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     
@@ -675,10 +676,11 @@ def vary_one_paper( dataclass, \
             if strgvarbtemp != strgvarbChng:
                 # set all but the varying variable to their mid-value
                 o = len(gdat.listvalu[strgvarbtemp]) 
-                setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][int(gdat.numbvalu[o]/2)])
+                setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
 
         setattr(gdat, strgvarbChng, gdat.listvalu[strgvarbChng][i])
-
+        
+        gdat.zoomtype = zoomType # currently hard-coded!!
         
         gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
         gdat.numbnois = gdat.numbdata - gdat.numbplan
@@ -697,76 +699,80 @@ def vary_one_paper( dataclass, \
         if datatype == 'here':
             gdat.inptraww, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, \
                 numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+            gdat.peri = np.asarray([[10 for i in range(gdat.numbdata)] for i in range(gdat.numbdata)])
+            gdat.time = np.ones(gdat.numbdata, gdat.numbtime)
 
         if datatype == 'ete6':
             print ('gdat.numbdata',gdat.numbdata)
             gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
                                                                         numbdata=gdat.numbdata, nois=gdat.nois)
                     
-            if gdat.phastype == 'raww':
-                gdat.inpt = gdat.inptraww
+        if gdat.phastype == 'raww':
+            gdat.inpt = gdat.inptraww
 
-            elif gdat.phastype == 'fold':
-                pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-                if not os.path.exists(pathsavefold):
-                    cntr = 0
-                    gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                    for k in gdat.indxdata:
-                        numbperi = gdat.peri[cntr].size
-                        indxperi = np.arange(numbperi)
-                        """
-                        # temp -- only uses the first period
-                        print 'k'
-                        print k
-                        print 'gdat.inptfold'
-                        summgene(gdat.inptfold)
-                        print 'gdat.inptraww'
-                        summgene(gdat.inptraww)
-                        print 'gdat.peri[k]'
-                        print gdat.peri[k]
-                        print
-                        """
-                        gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
-                                                                                                                            zoomtype=gdat.zoomtype)
-                
-                    print ('Writing to %s...') % pathsavefold
-                    np.savetxt(pathsavefold, gdat.inptfold)
-                else:
-                    print ('Reading from %s...') % pathsavefold
-                    gdat.inptfold = np.loadtxt(pathsavefold)
-                gdat.inpt = gdat.inptfold
+        elif gdat.phastype == 'fold':
+            pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
+            if not os.path.exists(pathsavefold):
+                cntr = 0
+                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                for k in gdat.indxdata:
+                    numbperi = gdat.peri[cntr].size
+                    indxperi = np.arange(numbperi)
+                    """
+                    # temp -- only uses the first period
+                    print 'k'
+                    print k
+                    print 'gdat.inptfold'
+                    summgene(gdat.inptfold)
+                    print 'gdat.inptraww'
+                    summgene(gdat.inptraww)
+                    print 'gdat.peri[k]'
+                    print gdat.peri[k]
+                    print
+                    """
+                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
+                                                                                                                        zoomtype=gdat.zoomtype)
+            
+                print ('Writing to %s...') % pathsavefold
+                np.savetxt(pathsavefold, gdat.inptfold)
+            else:
+                print ('Reading from %s...') % pathsavefold
+                gdat.inptfold = np.loadtxt(pathsavefold)
+            gdat.inpt = gdat.inptfold
 
-            elif gdat.phastype == 'both':
-                gdat.inptR = gdat.inptraww
-
-                pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-                if not os.path.exists(pathsavefold):
-                    cntr = 0
-                    gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                    for k in gdat.indxdata:
-                        numbperi = gdat.peri[cntr].size
-                        indxperi = np.arange(numbperi)
-                        """
-                        # temp -- only uses the first period
-                        print 'k'
-                        print k
-                        print 'gdat.inptfold'
-                        summgene(gdat.inptfold)
-                        print 'gdat.inptraww'
-                        summgene(gdat.inptraww)
-                        print 'gdat.peri[k]'
-                        print gdat.peri[k]
-                        print
-                        """
-                        gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
-                                                                                                                            zoomtype=gdat.zoomtype)
-                
-                    print ('Writing to %s...') % pathsavefold
-                    np.savetxt(pathsavefold, gdat.inptfold)
-                else:
-                    print ('Reading from %s...') % pathsavefold
-                    gdat.inptfold = np.loadtxt(pathsavefold)
-                gdat.inptF = gdat.inptfold
+        elif gdat.phastype == 'both':
+            gdat.inptR = gdat.inptraww
+            
+            pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat'
+             
+            if not os.path.exists(pathsavefold):
+                cntr = 0
+                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                for k in gdat.indxdata:
+                    numbperi = gdat.peri[cntr].size
+                    indxperi = np.arange(numbperi)
+                    """
+                    # temp -- only uses the first period
+                    print 'k'
+                    print k
+                    print 'gdat.inptfold'
+                    summgene(gdat.inptfold)
+                    print 'gdat.inptraww'
+                    summgene(gdat.inptraww)
+                    print 'gdat.peri[k]'
+                    print gdat.peri[k]
+                    print
+                    """
+                   
+                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
+                                                                                                                        zoomtype=gdat.zoomtype)
+            
+                print ('Writing to %s...' % pathsavefold)
+                np.savetxt(pathsavefold, gdat.inptfold)
+            else:
+                print ('Reading from %s...' % pathsavefold)
+                gdat.inptfold = np.loadtxt(pathsavefold)
+            gdat.inptF = gdat.inptfold
 
         # divide the data set into training and test data sets
         if gdat.phastype == 'raww' or gdat.phastype == 'fold':
