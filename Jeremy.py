@@ -1,18 +1,36 @@
+import datetime, os, sys, argparse, random
+
 import numpy as np
-import datetime, os
-import sys
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten, Input, Concatenate
-import tensorflow as tf
-import numpy as np
+
+import torch
+import torch.nn as nn
+import torch.nn.parallel
+import torch.backends.cudnn as cudnn
+import torch.optim as optim
+import torch.utils.data
+import torchvision.datasets as dset
+import torchvision.transforms as transforms
+import torchvision.utils as vutils
+
 import keras
-import matplotlib
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten, Input, Concatenate, GlobalMaxPool1D
+
+import tensorflow as tf
+
 import sklearn
 from sklearn.metrics import confusion_matrix, roc_auc_score
+
 import astropy as ap
+
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 import seaborn as sns
+
+from IPython.display import HTML
+
 from exop import main as exopmain
 
 # ----------------------------------------------------------------------------------
@@ -34,7 +52,7 @@ class gdatstrt(object):
         self.fractest = 0.1
     
         # number of epochs
-        self.numbepoc = 3
+        self.numbepoc = 1
     
         # number of runs for each configuration in order to determine the statistical uncertainty
         self.numbruns = 1
@@ -47,15 +65,15 @@ class gdatstrt(object):
         ## generative parameters of mock data
         self.listvalu['zoomtype'] = ['locl', 'glob']
 
-        self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
+        self.listvalu['numbtime'] = np.array([1e3, 3e1, 1e2, 3e2, 1e3]).astype(int)
         # temp
-        self.listvalu['dept'] = 1 - np.array([(i+2)*10**(-1) for i in range(5)]) # 1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) 
+        self.listvalu['dept'] = 1 - np.array([(i+2)*10**(-3) for i in range(5)]) # 1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) 
 
         self.listvalu['nois'] = np.array([0.03*(i+1)  for i in range(5)]) # SNR 10**(-2)*(i)
 
-        self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e3, 1e5, 3e5]).astype(int)
+        self.listvalu['numbdata'] = np.array([1e5, 1e4 , 3e3, 1e5, 3e5]).astype(int)
 
-        self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N IDEAL BETWEEN .5-.7
+        self.listvalu['fracplan'] = [0.5, 0.3 , 0.5, 0.7, 0.9] # frac P/N IDEAL BETWEEN .5-.7
 
         ## hyperparameters
         self.listvalu['numbdatabtch'] = [5, 10, 16, 20, 25] # IDEAL 16~25
@@ -93,58 +111,74 @@ class gdatstrt(object):
 
 # -----------------------------------------------------------------------------------
 
-# MODELS
+# CONVOLUTIONAL MODELS
 
 # models from "Scientific Domain Knowledge Improves Exoplanet Transit Classification with Deep Learning"
 
 paperloclinpt = 201      # input shape from paper [local val]
 papergloblinpt = 2001    # input shape from paper
 
+# astronet
 def exonet():
     loclinpt, globlinpt = 201, 2001 # hard coded for now
-    localinput = Input(shape=(int(loclinpt),), dtype='float32', name='localinput') 
+    padX = 'same'
+    padY = 'valid'
 
-    x = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(localinput)
-    x = Conv1D(5, 16, activation='relu')(x)
+    localinput = Input(shape=(int(loclinpt),1), dtype='float32', name='localinput') 
 
-    x = MaxPooling1D(pool_size=7, strides=2)(x)
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu', input_shape=(loclinpt,1))(localinput)
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu')(x)
 
-    x = Conv1D(5, 32, activation='relu')(x)
-    x = Conv1D(5, 32, activation='relu')(x)
+    x = MaxPooling1D(pool_size=7, strides=2, padding=padX)(x)
 
-    x = MaxPooling1D(pool_size=7, strides=2)(x)
+    x = Conv1D(kernel_size=5, filters=32, padding=padX, activation='relu')(x)
+    x = Conv1D(kernel_size=5, filters=32, padding=padX, activation='relu')(x)
+
+    x = MaxPooling1D(pool_size=7, strides=2, padding=padX)(x)
 
     # -----------------------------------------------------------------------------
-    globalinput = Input(shape=(int(globlinpt),), dtype='float32', name='globalinput')
+    globalinput = Input(shape=(int(globlinpt),1), dtype='float32', name='globalinput')
 
-    y = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(globalinput)
-    y = Conv1D(5, 16, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu', input_shape=(globlinpt,1))(globalinput)
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
 
-    y = Conv1D(5, 32, activation='relu')(y)
-    y = Conv1D(5, 32, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=32, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=32, padding=padY, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
 
-    y = Conv1D(5, 64, activation='relu')(y)
-    y = Conv1D(5, 64, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=64, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=64, padding=padY, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
 
-    y = Conv1D(5, 128, activation='relu')(y)
-    y = Conv1D(5, 128, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=128, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=128, padding=padY, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
 
-    y = Conv1D(5, 256, activation='relu')(y)
-    y = Conv1D(5, 256, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=256, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=256, padding=padY, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=5, strides=2)(y)
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
+    
+    """
+    print('shape test:', tf.keras.backend.shape(y))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[y])
+    print()
+    modldummy.summary()
+
+    print('shape test:', tf.keras.backend.shape(x))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[x])
+    print()
+    modldummy.summary()
+    """
 
     # ------------------------------------------------------------------------------
     z = keras.layers.concatenate([x, y])
-
+    z = Flatten()(z)
     # ------------------------------------------------------------------------------
 
     z = Dense(512, activation='relu')(z)
@@ -153,47 +187,66 @@ def exonet():
     z = Dense(512, activation='relu')(z)
 
     # ------------------------------------------------------------------------------
+    
     finllayr = Dense(1, activation='sigmoid', name='finl')(z)
 
     # ------------------------------------------------------------------------------
     modlfinl = Model(inputs=[localinput, globalinput], outputs=[finllayr])
 
     modlfinl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
-
+    # modlfinl.summary()
     return modlfinl
 
+# 
 def reduced():
     loclinpt, globlinpt = 201, 2001 # hard coded for now
-    localinput = Input(shape=(int(loclinpt),), dtype='float32', name='localinput') 
+    padX = 'same'
+    padY = 'same'
 
-    x = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(localinput)
+    localinput = Input(shape=(int(loclinpt),1), dtype='float32', name='localinput') 
 
-    x = MaxPooling1D(pool_size=2, strides=2)(x)
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu', input_shape=(loclinpt,1))(localinput)
 
-    x = Conv1D(5, 16, activation='relu')(x)
+    x = MaxPooling1D(pool_size=2, strides=2, padding=padX)(x)
+
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu')(x)
 
 
-    # x = MaxPooling1D()(x)
+    x = GlobalMaxPool1D()(x)
 
     # -----------------------------------------------------------------------------
-    globalinput = Input(shape=(int(globlinpt),), dtype='float32', name='globalinput')
+    globalinput = Input(shape=(int(globlinpt),1), dtype='float32', name='globalinput')
 
-    y = Conv1D(5, 16, activation='relu', input_shape=(None,loclinpt))(globalinput)
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu', input_shape=(globlinpt,1))(globalinput)
 
-    y = MaxPooling1D(pool_size=2, strides=2)(y)
+    y = MaxPooling1D(pool_size=2, strides=2, padding=padY)(y)
 
-    y = Conv1D(5, 16, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu')(y)
 
-    y = MaxPooling1D(pool_size=2, strides=2)(y)
+    y = MaxPooling1D(pool_size=2, strides=2, padding=padY)(y)
 
-    y = Conv1D(5, 32, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=32, padding=padY, activation='relu')(y)
 
-    # y = MaxPooling1D()(y)
+    y = GlobalMaxPool1D()(y)
 
+
+    """
+    # print('shape test:', tf.keras.backend.shape(y))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[y])
+    print()
+    modldummy.summary()
+
+    print()
+
+    # print('shape test:', tf.keras.backend.shape(x))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[x])
+    print()
+    modldummy.summary()
+    """
     # ------------------------------------------------------------------------------
     z = keras.layers.concatenate([x, y])
 
-    z = MaxPooling1D()(z)
+    
     # ------------------------------------------------------------------------------
 
     z = Dense(1, activation='relu')(z)
@@ -630,10 +683,18 @@ def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
     binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
     indxtime = np.arange(numbtime)
     fluxavgd = np.empty(numbtime)
+
+    # print('\nfluxavgd before: \n', fluxavgd)
+
     for k in indxtime:
         indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
         fluxavgd[k] = np.mean(flux[indx])
 
+    # print('\nfluxavgd after: \n', fluxavgd)
+    
+    whereNan = np.isnan(fluxavgd)
+    fluxavgd[whereNan] = 0
+    # print(fluxavgd)
     return fluxavgd
 
 
@@ -642,14 +703,15 @@ def vary_one_paper( dataclass, \
                     strgvarbChng, \
                     modelfunc, \
                     datatype='here', \
-                    zoomType='local', \
+                    zoomType='locl', \
                     saveinpt=False, \
-                    phastype='fold'):
+                    phastype='both'):
     
     gdat = dataclass
 
     gdat.phastype = phastype
-    
+ 
+
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     
@@ -660,7 +722,7 @@ def vary_one_paper( dataclass, \
     # NEW
     os.system('mkdir -p %s' % pathplot)
 
-    gdat.numbtimebins = 100
+    gdat.numbtimebins = 201 #hard coded!!!
     gdat.indxtimebins = np.arange(gdat.numbtimebins)
 
     # temp
@@ -675,10 +737,13 @@ def vary_one_paper( dataclass, \
             if strgvarbtemp != strgvarbChng:
                 # set all but the varying variable to their mid-value
                 o = len(gdat.listvalu[strgvarbtemp]) 
-                setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][int(gdat.numbvalu[o]/2)])
+
+                # BIG TEMP
+                setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
 
         setattr(gdat, strgvarbChng, gdat.listvalu[strgvarbChng][i])
-
+        
+        gdat.zoomtype = zoomType # currently hard-coded!!
         
         gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
         gdat.numbnois = gdat.numbdata - gdat.numbplan
@@ -693,80 +758,123 @@ def vary_one_paper( dataclass, \
         gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
         # number of signal data samples
         numbdataplan = int(gdat.numbdata * gdat.fracplan)
+
+
+        temps = pathplot + 'temp_valz.npz'
+        if not os.path.exists(temps):
+            
+            if datatype == 'here':
+                # TEMP
+                # BREAKS: GDAT.NUMBTIME BY SETTING FIXED VALUES HERE
+                # MAKES: RAWWR AND RAWWF HAVE SET TIMES AS SEEN IN PAPER
+
+                # rawwR needs 2001 numbtime
+                gdat.inptraww, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
+                    numbnois=gdat.numbnois, numbtime=2001, dept=gdat.dept, nois=gdat.nois)
+
+                # rawwF needs 201 numbtime
+                """
+                gdat.inptrawwF, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
+                    numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+                """
+
+                # TEMP!
+                # will work in days so this is about a month
+                gdat.time = np.arange(0, 30) # will change when masking
+
+                rawinpt, output, period = gdat.inptraww, gdat.outp, gdat.peri
+                
+                np.savez(temps, rawinpt, output, period)
+            
+
+            elif datatype == 'ete6':
+                print ('gdat.numbdata',gdat.numbdata)
+                gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
+                                                                            numbdata=gdat.numbdata, nois=gdat.nois)
         
-        if datatype == 'here':
-            gdat.inptraww, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, \
-                numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+        
+        else:
+            tempdata = np.load(temps)
+            gdat.inptraww, gdat.outp, gdat.peri = tempdata['arr_0'], tempdata['arr_1'], tempdata['arr_2']
+            # TEMP!
+            # will work in days so this is about a month
+            gdat.time = np.arange(0, 30) # will change when masking
 
-        if datatype == 'ete6':
-            print ('gdat.numbdata',gdat.numbdata)
-            gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
-                                                                        numbdata=gdat.numbdata, nois=gdat.nois)
+
+        if gdat.phastype == 'raww':
+            gdat.inpt = gdat.inptraww
+
+        elif gdat.phastype == 'fold':
+            pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
+            if not os.path.exists(pathsavefold):
+                cntr = 0
+                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                for k in gdat.indxdata:
+                    numbperi = gdat.peri[cntr].size
+                    indxperi = np.arange(numbperi)
+                    """
+                    # temp -- only uses the first period
+                    print 'k'
+                    print k
+                    print 'gdat.inptfold'
+                    summgene(gdat.inptfold)
+                    print 'gdat.inptraww'
+                    summgene(gdat.inptraww)
+                    print 'gdat.peri[k]'
+                    print gdat.peri[k]
+                    print
+                    """
                     
-            if gdat.phastype == 'raww':
-                gdat.inpt = gdat.inptraww
+                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
+                                                                                                                        zoomtype=gdat.zoomtype)
+            
+                print ('Writing to %s...') % pathsavefold
+                np.savetxt(pathsavefold, gdat.inptfold)
+            else:
+                print ('Reading from %s...') % pathsavefold
+                gdat.inptfold = np.loadtxt(pathsavefold)
+            gdat.inpt = gdat.inptfold
 
-            elif gdat.phastype == 'fold':
-                pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-                if not os.path.exists(pathsavefold):
-                    cntr = 0
-                    gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                    for k in gdat.indxdata:
-                        numbperi = gdat.peri[cntr].size
-                        indxperi = np.arange(numbperi)
-                        """
-                        # temp -- only uses the first period
-                        print 'k'
-                        print k
-                        print 'gdat.inptfold'
-                        summgene(gdat.inptfold)
-                        print 'gdat.inptraww'
-                        summgene(gdat.inptraww)
-                        print 'gdat.peri[k]'
-                        print gdat.peri[k]
-                        print
-                        """
-                        gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
-                                                                                                                            zoomtype=gdat.zoomtype)
-                
-                    print ('Writing to %s...') % pathsavefold
-                    np.savetxt(pathsavefold, gdat.inptfold)
-                else:
-                    print ('Reading from %s...') % pathsavefold
-                    gdat.inptfold = np.loadtxt(pathsavefold)
-                gdat.inpt = gdat.inptfold
+        elif gdat.phastype == 'both':
+            gdat.inptR = gdat.inptraww
+            
+            pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat'
+            
+            #temp true
+            if not os.path.exists(pathsavefold):
+                cntr = 0
+                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                for k in gdat.indxdata:
+                    numbperi = gdat.peri[cntr].size
+                    indxperi = np.arange(numbperi)
+                    
+                    # temp -- only uses the first period
+                    
+                    """
+                    print('\ngdat.inptfold')
+                    summgene(gdat.inptfold)
+                    print('\ngdat.inptraww')
+                    summgene(gdat.inptraww)
+                    print('\ngdat.peri[k]: ', gdat.peri[k%len(gdat.peri)])
+            
+                    print('\n\n\n\n')
+                    """
 
-            elif gdat.phastype == 'both':
-                gdat.inptR = gdat.inptraww
-
-                pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-                if not os.path.exists(pathsavefold):
-                    cntr = 0
-                    gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                    for k in gdat.indxdata:
-                        numbperi = gdat.peri[cntr].size
-                        indxperi = np.arange(numbperi)
-                        """
-                        # temp -- only uses the first period
-                        print 'k'
-                        print k
-                        print 'gdat.inptfold'
-                        summgene(gdat.inptfold)
-                        print 'gdat.inptraww'
-                        summgene(gdat.inptraww)
-                        print 'gdat.peri[k]'
-                        print gdat.peri[k]
-                        print
-                        """
-                        gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
-                                                                                                                            zoomtype=gdat.zoomtype)
-                
-                    print ('Writing to %s...') % pathsavefold
-                    np.savetxt(pathsavefold, gdat.inptfold)
-                else:
-                    print ('Reading from %s...') % pathsavefold
-                    gdat.inptfold = np.loadtxt(pathsavefold)
-                gdat.inptF = gdat.inptfold
+                    # this might have broken everything
+                    # cntr+=1
+                    # cntr = cntr%len(gdat.peri)
+                    
+                    # edited gdat.peri[k][0] to gdat.peri[k] 
+                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype=gdat.zoomtype)                                                                                                                       
+            
+                print ('Writing to %s...' % pathsavefold)
+                np.savetxt(pathsavefold, gdat.inptfold)
+            else:
+                print ('Reading from %s...' % pathsavefold)
+                gdat.inptfold = np.loadtxt(pathsavefold)
+            gdat.inptF = gdat.inptfold
+        
+        
 
         # divide the data set into training and test data sets
         if gdat.phastype == 'raww' or gdat.phastype == 'fold':
@@ -790,7 +898,7 @@ def vary_one_paper( dataclass, \
             gdat.outptest = gdat.outp[:numbdatatest]
             gdat.outptran = gdat.outp[numbdatatest:] 
 
-
+        print('test & train generated')
         
         # optional graphing of input light curves
         if saveinpt:
@@ -833,12 +941,15 @@ def vary_one_paper( dataclass, \
             gdat.modl = modelfunc()
 
             # gdat.modl.summary()
+            print('running thresholds for {}'.format(t))
 
-            prec, recal = thresh_paper(gdat, points=200)
-
+            prec, recal = thresh_paper(gdat)
+        
             if gdat.phastype == 'both':
-                y_pred = gdat.modl.predict([gdat.inpttestF, gdat.inpttestR])
-
+                loc_inptF = gdat.inpttestF[:,:,None]
+                loc_inptR = gdat.inpttestR[:,:,None]
+                y_pred = gdat.modl.predict([loc_inptF, loc_inptR])
+                
             else:
                 y_pred = gdat.modl.predict(gdat.inpttest)
 
@@ -868,18 +979,24 @@ def vary_one_paper( dataclass, \
             plt.savefig(path)
             plt.close()
 
+            #temp
+            break
+
 # to vary thresholds on a multi-input model
 def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
     
     pointsX = []
     pointsY = []
-    thresholds = [0.3 + i/(points*2) for i in range(points)]
+    thresholds = [0.5 + i/(points*3) for i in range(points)]
     modelinst = dataclass.modl
     
     for y in dataclass.indxepoc:
         
         if dataclass.phastype == 'both':
-            modelinst.fit([dataclass.inptF, dataclass.inptR], dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
+            inptF = dataclass.inptF[:, :, None]
+            inptR = dataclass.inptR[:, :, None]
+            
+            modelinst.fit([inptF, inptR], dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
         else: 
             modelinst.fit(dataclass.inpt, dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
         
@@ -895,8 +1012,8 @@ def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
                     inptR = dataclass.inpttestR
                     outp = dataclass.outptest
 
-                inptF = inptF[:, :]
-                inptR = inptR[:, :]
+                inptF = inptF[:, :, None]
+                inptR = inptR[:, :, None]
 
             else:
                 if r==0:
@@ -912,13 +1029,14 @@ def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
             for i in thresholds:
                 
                 if dataclass.phastype == 'both':
+                    # print(modelinst.predict([inptF, inptR]))
                     outppred = (modelinst.predict([inptF, inptR]) > i).astype(int)
 
                 else:
                     outppred = (modelinst.predict(inpt) > i).astype(int)
                 
                 matrconf = confusion_matrix(outp, outppred)
-
+                
                 if matrconf.size == 1:
                     matrconftemp = np.copy(matrconf)
                     matrconf = np.empty((2, 2))
@@ -951,5 +1069,4 @@ def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
                     pointsX.append(Precision)
                     pointsY.append(Recall)
     return pointsX, pointsY
-
 
