@@ -7,6 +7,8 @@ from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten
 
 import tensorflow as tf
 
+import lightkurve
+
 import sklearn
 from sklearn.metrics import confusion_matrix
 
@@ -28,48 +30,7 @@ class bind():
         self.data = data
         self.period = period
 
-    def binn(self, lowr, high, width):
-        """
-        Basic creation of bins -- is called within more complex methods later
-        """
-        bins = []
-        for low in range(lowr, high, width):
-            bins.append((low, low+width))
-        return bins
 
-    def fold(self, divisor):
-        """
-        Folds the input data in on itself.
-
-        Input:
-        divisor := how many data points per period that we enforce
-
-        Output:
-        folded := the averaged folded vector over the period
-        """
-
-        #initialize
-        data = self.data
-        period = int(len(data)/divisor)
-
-        # generate holder values
-        folded = np.zeros(period)
-        noneCtch = np.ones(period) * divisor
-
-        # fill holders with values
-        for i in range(len(data)):
-            if data[i] == None:
-                noneCtch[i%period] -= 1 # catch when a None value occurs -> decreases divisor for averaging later
-                pass
-            else:
-                folded[i%period] += data[i]
-        
-        # average each element by the number of actual values input
-        for i in range(len(folded)):
-            folded[i] /= noneCtch[i]
-
-        return folded
-    
     def scop(self, binnstep=1, kind='locl', period=10):
         """
         scop = Bin within a certain Scope
@@ -116,27 +77,6 @@ class bind():
         return np.asarray(final)
 
 
-
-def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='locl'):
-    
-    timefold = ((time - epoc) / peri + 0.25) % 1.
-    
-    if zoomtype == 'glob':
-        minmtimefold = 0.
-        maxmtimefold = 1.
-    else:
-        minmtimefold = 0.15
-        maxmtimefold = 0.35
-    binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
-    indxtime = np.arange(numbtime)
-    fluxavgd = np.empty(numbtime)
-    for k in indxtime:
-        indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
-        fluxavgd[k] = np.mean(flux[indx])
-
-    return fluxavgd
-
-
 class gdatstrt(object):
     
     """
@@ -162,27 +102,32 @@ class gdatstrt(object):
 
         # a dictionary to hold the variable values for which the training will be repeated
         self.listvalu = {}
-        ## generative parameters of mock data
-        self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
-        # temp
-        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
-
-        self.listvalu['zoomtype'] = ['locl', 'glob']
         
-        self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
+        if self.datatype == 'simpmock':
+            ## generative parameters of mock data
+            self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
+            # temp
+            self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
 
-        #self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
-        self.listvalu['numbdata'] = np.array([3e3, 1e4 , 300, 1e5, 3e5]).astype(int)
+            self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
 
-        self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N
+            #self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
+            self.listvalu['numbdata'] = np.array([3e3, 1e4 , 300, 1e5, 3e5]).astype(int)
+
+            self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N
 
         ## hyperparameters
+        ### data augmentation
+        self.listvalu['zoomtype'] = ['locl', 'glob']
+        
+        ### neural network
+        #### batch size
         self.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
-        ### number of layers
+        #### number of layers
         self.listvalu['numblayr'] = [1, 2, 3, 4, 5]
-        ### number of dimensions in each layer
+        #### number of dimensions in each layer
         self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
-        ### fraction of dropout in in each layer
+        #### fraction of dropout in in each layer
         self.listvalu['fracdrop'] = [0., 0.15, 0.3, 0.45, 0.6]
         
         # list of strings holding the names of the variables
@@ -276,6 +221,9 @@ class gdatstrt(object):
                     numbdatatemp = self.numbdatatest
 
                 inpt = inpt[:, :, None]
+                
+                assert np.isfinite(inpt).all()
+
                 outppred = (self.modl.predict(inpt) > 0.5).astype(int) # this is threshold run for different values here
                 matrconf = confusion_matrix(outp, outppred)
                 if matrconf.size == 1:
@@ -286,6 +234,14 @@ class gdatstrt(object):
                 flpo = matrconf[0, 1]
                 flne = matrconf[1, 0]
                 trpo = matrconf[1, 1]
+                
+                print 'inpt'
+                summgene(inpt)
+                print 'outppred'
+                summgene(outppred)
+                print 'matrconf'
+                print matrconf
+                print 
 
                 if float(trpo + flpo) > 0:
                     metr[y, r, 0] = trpo / float(trpo + flpo) # precision
@@ -339,7 +295,7 @@ def expl( \
     print ('CtC explorer initialized at %s.' % strgtimestmp)
     
     ## path where plots will be generated
-    pathplot = os.environ['CTHC_DATA_PATH'] + '/exop/'
+    pathplot = os.environ['CTHC_DATA_PATH'] + '/inpt/'
     os.system('mkdir -p %s' % pathplot)
     print ('Will generate plots in %s' % pathplot)
     
@@ -413,49 +369,62 @@ def expl( \
                     # number of signal data samples
                     numbdataplan = int(gdat.numbdata * gdat.fracplan)
                     
-                    if datatype == 'here':
+                    if datatype == 'simpmock':
                         gdat.inptraww, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, \
                                 numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
 
                     if datatype == 'ete6':
                         print 'gdat.numbdata'
                         print gdat.numbdata
-                        gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, numbdata=gdat.numbdata, nois=gdat.nois)
+                        gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_dataete6(numbdata=gdat.numbdata, nois=gdat.nois)
+                    
+                    if datatype == 'tess':
+                        gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_datatess()
                     
                     if gdat.phastype == 'raww':
                         gdat.inpt = gdat.inptraww
+    
+        
+                    print 'gdat.phastype'
+                    print gdat.phastype
+                    print
 
                     if gdat.phastype == 'fold':
                         pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-                        if not os.path.exists(pathsavefold):
+                        # temp
+                        if True or os.path.exists(pathsavefold):
                             cntr = 0
-                            gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                            gdat.inptfdbn = np.empty((gdat.numbdata, gdat.numbtimebins))
                             for k in gdat.indxdata:
                                 numbperi = gdat.peri[cntr].size
                                 indxperi = np.arange(numbperi)
                                 # temp -- only uses the first period
                                 print 'k'
                                 print k
-                                print 'gdat.inptfold'
-                                summgene(gdat.inptfold)
-                                print 'gdat.inptraww'
-                                summgene(gdat.inptraww)
+                                print 'gdat.inptraww[k, :]'
+                                summgene(gdat.inptraww[k, :])
                                 print 'gdat.peri[k]'
                                 print gdat.peri[k]
-                                print
+                                
+                                lightkurve
 
-                                gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
+                                gdat.inptfdbn[k, :] = fdbn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
                                                                                                                                     zoomtype=gdat.zoomtype)
                         
+                                print 'gdat.inptfdbn[k, :]'
+                                summgene(gdat.inptfdbn[k, :])
+                                print
+                                assert np.isfinite(gdat.inptfdbn[k, :]).all()
+
                             print 'Writing to %s...' % pathsavefold
-                            np.savetxt(pathsavefold, gdat.inptfold)
+                            np.savetxt(pathsavefold, gdat.inptfdbn)
                         else:
                             print 'Reading from %s...' % pathsavefold
-                            gdat.inptfold = np.loadtxt(pathsavefold)
-                        gdat.inpt = gdat.inptfold
+                            gdat.inptfdbn = np.loadtxt(pathsavefold)
+                        gdat.inpt = gdat.inptfdbn
 
                     # plot
-                    figr, axis = plt.subplots()
+                    figr, axis = plt.subplots(figsize=(12, 6))
                     for k in gdat.indxdata:
                         if k < 10:
                             if gdat.outp[k] == 1:
@@ -468,15 +437,17 @@ def expl( \
                                 indx = gdat.indxtimebins
                             axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
                     plt.tight_layout()
-                    plt.xlabel('time')
-                    plt.ylabel('data-input')
-                    plt.title('input vs time')
+                    plt.xlabel('Time')
+                    plt.ylabel('Flux')
                     plt.legend()
-                    path = pathplot + 'inpt_%04d%s%04d' % (t, strgvarb, i) + strgtimestmp + '.pdf' 
+                    path = pathplot + strgtimestmp + 'inpt_%04d%s%04d' % (t, strgvarb, i) + '.pdf' 
                     print 'Writing to %s...' % path
                     plt.savefig(path)
                     plt.close()
         
+                    assert np.isfinite(gdat.inpt).all()
+                    assert np.isfinite(gdat.outp).all()
+
                     # divide the data set into training and test data sets
                     numbdatatest = int(gdat.fractest * gdat.numbdata)
                     gdat.inpttest = gdat.inpt[:numbdatatest, :]
@@ -512,12 +483,6 @@ def expl( \
                     listhdun = ap.io.fits.HDUList([hdun])
                     listhdun.writeto(pathsave, overwrite=True)
                     
-                    print('')
-                    print('')
-                    print('')
-                    print('')
-
-
                 gdat.dictmetr[strgvarb][0, 0, t, i] = metr[-1, 0, 0]
                 gdat.dictmetr[strgvarb][1, 0, t, i] = metr[-1, 1, 0]
                 gdat.dictmetr[strgvarb][0, 1, t, i] = metr[-1, 0, 1]
