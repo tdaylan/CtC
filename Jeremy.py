@@ -230,7 +230,7 @@ def reduced():
     y = GlobalMaxPool1D()(y)
 
 
-    """
+    
     # print('shape test:', tf.keras.backend.shape(y))
     modldummy = Model(inputs=[localinput, globalinput], outputs=[y])
     print()
@@ -242,7 +242,7 @@ def reduced():
     modldummy = Model(inputs=[localinput, globalinput], outputs=[x])
     print()
     modldummy.summary()
-    """
+    
     # ------------------------------------------------------------------------------
     z = keras.layers.concatenate([x, y])
 
@@ -705,12 +705,9 @@ def vary_one_paper( dataclass, \
                     datatype='here', \
                     zoomType='locl', \
                     saveinpt=False, \
-                    phastype='both'):
+                    numbtimebins=201):
     
     gdat = dataclass
-
-    gdat.phastype = phastype
- 
 
     ## time stamp string
     strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -722,26 +719,227 @@ def vary_one_paper( dataclass, \
     # NEW
     os.system('mkdir -p %s' % pathplot)
 
-    gdat.numbtimebins = 201 #hard coded!!!
+    gdat.numbtimebins = numbtimebins # set to 201 to replicate paper
     gdat.indxtimebins = np.arange(gdat.numbtimebins)
 
     # temp
     gdat.maxmindxvarb = 10
     # END NEW
 
+    if strgvarbChng != None:
+        # for each value
+        for i in range(len(gdat.listvalu[strgvarbChng])):
 
-    # for each value
-    for i in range(len(gdat.listvalu[strgvarbChng])):
+            for strgvarbtemp in gdat.liststrgvarb:
+                if strgvarbtemp != strgvarbChng:
+                    # set all but the varying variable to their mid-value
+                    # o = len(gdat.listvalu[strgvarbtemp]) 
 
+
+                    # BIG TEMP
+                    # only setting the very first element of each gdat.listvalu !!!
+                    setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
+
+            setattr(gdat, strgvarbChng, gdat.listvalu[strgvarbChng][i])
+            
+            gdat.zoomtype = zoomType # currently hard-coded!!
+            
+            gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
+            gdat.numbnois = gdat.numbdata - gdat.numbplan
+            
+            gdat.indxtime = np.arange(gdat.numbtime)
+            gdat.indxdata = np.arange(gdat.numbdata)
+            gdat.indxlayr = np.arange(gdat.numblayr)
+
+            # number of test data samples
+            gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
+            # number of training data samples
+            gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
+            # number of signal data samples
+            numbdataplan = int(gdat.numbdata * gdat.fracplan)
+
+
+            temps = pathplot + 'temp_valz.npz'
+            if not os.path.exists(temps):
+                
+                if datatype == 'here':
+                    # TEMP
+                    # BREAKS: GDAT.NUMBTIME BY SETTING FIXED VALUES HERE
+                    # MAKES: RAWWR AND RAWWF HAVE SET TIMES AS SEEN IN PAPER
+
+                    # rawwR needs 2001 numbtime
+                    gdat.inptraww, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
+                        numbnois=gdat.numbnois, numbtime=2001, dept=gdat.dept, nois=gdat.nois)
+
+                    # rawwF needs 201 numbtime
+                    """
+                    gdat.inptrawwF, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
+                        numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+                    """
+
+                    rawinpt, output, period = gdat.inptraww, gdat.outp, gdat.peri
+                    
+                    np.savez(temps, rawinpt, output, period)
+                
+
+                elif datatype == 'ete6':
+                    print ('gdat.numbdata',gdat.numbdata)
+                    gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
+                                                                                numbdata=gdat.numbdata, nois=gdat.nois)
+            
+
+            else:
+                tempdata = np.load(temps)
+                gdat.inptraww, gdat.outp, gdat.peri = tempdata['arr_0'], tempdata['arr_1'], tempdata['arr_2']
+            
+            
+            # TEMP!
+            # will work in days so this is about a month
+            gdat.time = np.arange(0, 30) # will change when masking
+
+
+            gdat.inptR = gdat.inptraww
+            
+            pathsavefold = pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat'
+            
+            #temp true
+            if not os.path.exists(pathsavefold):
+                cntr = 0
+                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
+                for k in gdat.indxdata:
+                    numbperi = gdat.peri[cntr].size
+                    indxperi = np.arange(numbperi)
+                    
+                    # temp -- only uses the first period
+                    
+                    """
+                    print('\ngdat.inptfold')
+                    summgene(gdat.inptfold)
+                    print('\ngdat.inptraww')
+                    summgene(gdat.inptraww)
+                    print('\ngdat.peri[k]: ', gdat.peri[k%len(gdat.peri)])
+            
+                    print('\n\n\n\n')
+                    """
+
+                    # this might have broken everything
+                    # cntr+=1
+                    # cntr = cntr%len(gdat.peri)
+                    
+                    # edited gdat.peri[k][0] to gdat.peri[k] 
+                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype=gdat.zoomtype)                                                                                                                       
+            
+                print ('Writing to %s...' % pathsavefold)
+                np.savetxt(pathsavefold, gdat.inptfold)
+            else:
+                print ('Reading from %s...' % pathsavefold)
+                gdat.inptfold = np.loadtxt(pathsavefold)
+            
+            gdat.inptF = gdat.inptfold
+            
+            
+            # divide into training and testing
+            numbdatatest = int(gdat.fractest * gdat.numbdata)
+
+            gdat.inpttestR = gdat.inptR[:numbdatatest, :] # R for raw --> global
+            gdat.inpttranR = gdat.inptR[numbdatatest:, :]
+
+            gdat.inpttestF = gdat.inptF[:numbdatatest, :] # F for folded --> local
+            gdat.inpttranF = gdat.inptF[numbdatatest:, :]
+
+            gdat.outptest = gdat.outp[:numbdatatest]
+            gdat.outptran = gdat.outp[numbdatatest:] 
+
+            print('test & train generated')
+            
+            # optional graphing of input light curves
+            if saveinpt:
+                figr, axis = plt.subplots() # figr unused
+                for k in gdat.indxdata:
+                    if k < 10:
+                        if gdat.outp[k] == 1:
+                            colr = 'r'
+                        else:
+                            colr = 'b'
+                        
+                        if gdat.phastype == 'raww':
+                            indx = gdat.indxtime
+                            axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
+                        if gdat.phastype == 'fold':
+                            indx = gdat.indxtimebins
+                            axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
+                        
+                        if gdat.phastype == 'both':
+                            indxR = gdat.indxtime # for Raww part
+                            indxF = gdat.indxtimebins # for folded part
+
+                            inv = 'g'
+                            axis.plot(indxR, gdat.inptR[k, :], str(colr+ 'o'), indxF, gdat.inptF[k, :], str(inv+ 'o'), ls='-', markersize=5, alpha=0.6, )
+                        
+                        
+                plt.tight_layout()
+                plt.xlabel('time')
+                plt.ylabel('data-input')
+                plt.title('input vs time')
+                plt.legend()
+                path = pathplot + 'inpt_%s%s%04d' % (zoomType, strgvarbChng, i) + strgtimestmp + '.pdf' 
+                plt.savefig(path)
+                plt.close()
+            
+
+
+            for t in range(len(gdat.indxruns)):
+    
+                gdat.modl = modelfunc()
+
+                # gdat.modl.summary()
+                print('running thresholds for {}'.format(t))
+
+                prec, recal = thresh_paper(gdat)
+            
+                if gdat.phastype == 'both':
+                    loc_inptF = gdat.inpttestF[:,:,None]
+                    loc_inptR = gdat.inpttestR[:,:,None]
+                    y_pred = gdat.modl.predict([loc_inptF, loc_inptR])
+                    
+                else:
+                    y_pred = gdat.modl.predict(gdat.inpttest)
+
+                y_real = gdat.outptest
+                auc = roc_auc_score(y_real, y_pred)
+
+
+                textstr = '\n'.join((
+                    r'$\mathrm{Signal:Noise}=%.2f$' % (gdat.dept/gdat.nois, ),
+                    # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
+                    r'$\mathrm{AUC}=%.8f$' % (auc, ),
+                    r'$\mathrm{Depth}=%.2f$' % (gdat.dept, )))
+            
+
+                figr, axis = plt.subplots()
+                axis.plot(prec, recal, marker='o', ls='', markersize=3, alpha=0.6)
+                axis.axhline(1, alpha=.5)
+                axis.axvline(1, alpha=.5)
+                props = dict(boxstyle='round', alpha=0.5)
+                axis.text(0.05, 0.25, textstr, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+                plt.tight_layout()
+                plt.xlabel('Recall')
+                plt.ylabel('Precision')
+                plt.title('Precision v Recall, {0}{1}, {2}'.format(str(strgvarbChng), str(getattr(gdat, strgvarbChng)), zoomType))
+                # plt.legend()
+                path = pathplot + '{0}PvR_{1}_{2}{3}_'.format(t, zoomType, strgvarbChng, getattr(gdat, strgvarbChng)) + strgtimestmp + '.pdf' 
+                plt.savefig(path)
+                plt.close()
+
+                #temp
+                
+    else:
         for strgvarbtemp in gdat.liststrgvarb:
-            if strgvarbtemp != strgvarbChng:
-                # set all but the varying variable to their mid-value
-                o = len(gdat.listvalu[strgvarbtemp]) 
+            # BIG TEMP
+            # only setting the very first element of each gdat.listvalu !!!
+            setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
+        
 
-                # BIG TEMP
-                setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
-
-        setattr(gdat, strgvarbChng, gdat.listvalu[strgvarbChng][i])
         
         gdat.zoomtype = zoomType # currently hard-coded!!
         
@@ -778,10 +976,6 @@ def vary_one_paper( dataclass, \
                     numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
                 """
 
-                # TEMP!
-                # will work in days so this is about a month
-                gdat.time = np.arange(0, 30) # will change when masking
-
                 rawinpt, output, period = gdat.inptraww, gdat.outp, gdat.peri
                 
                 np.savez(temps, rawinpt, output, period)
@@ -792,111 +986,81 @@ def vary_one_paper( dataclass, \
                 gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
                                                                             numbdata=gdat.numbdata, nois=gdat.nois)
         
-        
+
         else:
             tempdata = np.load(temps)
             gdat.inptraww, gdat.outp, gdat.peri = tempdata['arr_0'], tempdata['arr_1'], tempdata['arr_2']
-            # TEMP!
-            # will work in days so this is about a month
-            gdat.time = np.arange(0, 30) # will change when masking
-
-
-        if gdat.phastype == 'raww':
-            gdat.inpt = gdat.inptraww
-
-        elif gdat.phastype == 'fold':
-            pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-            if not os.path.exists(pathsavefold):
-                cntr = 0
-                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                for k in gdat.indxdata:
-                    numbperi = gdat.peri[cntr].size
-                    indxperi = np.arange(numbperi)
-                    """
-                    # temp -- only uses the first period
-                    print 'k'
-                    print k
-                    print 'gdat.inptfold'
-                    summgene(gdat.inptfold)
-                    print 'gdat.inptraww'
-                    summgene(gdat.inptraww)
-                    print 'gdat.peri[k]'
-                    print gdat.peri[k]
-                    print
-                    """
-                    
-                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
-                                                                                                                        zoomtype=gdat.zoomtype)
-            
-                print ('Writing to %s...') % pathsavefold
-                np.savetxt(pathsavefold, gdat.inptfold)
-            else:
-                print ('Reading from %s...') % pathsavefold
-                gdat.inptfold = np.loadtxt(pathsavefold)
-            gdat.inpt = gdat.inptfold
-
-        elif gdat.phastype == 'both':
-            gdat.inptR = gdat.inptraww
-            
-            pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat'
-            
-            #temp true
-            if not os.path.exists(pathsavefold):
-                cntr = 0
-                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                for k in gdat.indxdata:
-                    numbperi = gdat.peri[cntr].size
-                    indxperi = np.arange(numbperi)
-                    
-                    # temp -- only uses the first period
-                    
-                    """
-                    print('\ngdat.inptfold')
-                    summgene(gdat.inptfold)
-                    print('\ngdat.inptraww')
-                    summgene(gdat.inptraww)
-                    print('\ngdat.peri[k]: ', gdat.peri[k%len(gdat.peri)])
-            
-                    print('\n\n\n\n')
-                    """
-
-                    # this might have broken everything
-                    # cntr+=1
-                    # cntr = cntr%len(gdat.peri)
-                    
-                    # edited gdat.peri[k][0] to gdat.peri[k] 
-                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype=gdat.zoomtype)                                                                                                                       
-            
-                print ('Writing to %s...' % pathsavefold)
-                np.savetxt(pathsavefold, gdat.inptfold)
-            else:
-                print ('Reading from %s...' % pathsavefold)
-                gdat.inptfold = np.loadtxt(pathsavefold)
-            gdat.inptF = gdat.inptfold
         
         
+        # TEMP!
+        # will work in days so this is about a month
+        gdat.time = np.arange(0, 30) # will change when masking
 
-        # divide the data set into training and test data sets
-        if gdat.phastype == 'raww' or gdat.phastype == 'fold':
+        #fix raw to global; fold to local
 
-            numbdatatest = int(gdat.fractest * gdat.numbdata)
-            gdat.inpttest = gdat.inpt[:numbdatatest, :]
-            gdat.outptest = gdat.outp[:numbdatatest]
-            gdat.inpttran = gdat.inpt[numbdatatest:, :]
-            gdat.outptran = gdat.outp[numbdatatest:] 
 
-        elif gdat.phastype == 'both':
+        gdat.inptR = gdat.inptraww
+        
+        pathsavefoldLocl = pathplot + 'savefold_%s%s%04d' % (datatype, 'locl', gdat.numbtimebins) + '.dat'
+        pathsavefoldGlob = pathplot + 'savefold_%s%s%04d' % (datatype, 'glob', gdat.numbtimebins) + '.dat'
+        #temp true
+        if not (os.path.exists(pathsavefoldLocl) and os.path.exists(pathsavefoldGlob)):
+            cntr = 0
+            gdat.inptfoldL = np.empty((gdat.numbdata, gdat.numbtimebins))
+            gdat.inptfoldG = np.empty((gdat.numbdata, gdat.numbtimebins))
+            for k in gdat.indxdata:
+                numbperi = gdat.peri[cntr].size
+                indxperi = np.arange(numbperi)
+                
+                # temp -- only uses the first period
+                
+                """
+                print('\ngdat.inptfold')
+                summgene(gdat.inptfold)
+                print('\ngdat.inptraww')
+                summgene(gdat.inptraww)
+                print('\ngdat.peri[k]: ', gdat.peri[k%len(gdat.peri)])
+        
+                print('\n\n\n\n')
+                """
 
-            numbdatatest = int(gdat.fractest * gdat.numbdata)
+                # this might have broken everything
+                # cntr+=1
+                # cntr = cntr%len(gdat.peri)
+                
+                # edited gdat.peri[k][0] to gdat.peri[k] 
+                gdat.inptfoldL[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype='locl') 
+                # temp      
+                # timebins for global might need to be different from local?                                                                                                                
+                gdat.inptfoldG[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype='glob')                                                                                                                     
+            print ('Writing to %s...' % pathsavefoldLocl)
+            np.savetxt(pathsavefoldLocl, gdat.inptfoldL)
+            # temp
+            print ('Writing to %s...' % pathsavefoldGlob)
+            np.savetxt(pathsavefoldGlob, gdat.inptfoldG)
+        else:
+            print ('Reading from %s...' % pathsavefoldLocl)
+            gdat.inptfoldL = np.loadtxt(pathsavefoldLocl)
+            # temp
+            print ('Reading from %s...' % pathsavefoldGlob)
+            gdat.inptfoldG = np.loadtxt(pathsavefoldGlob)
+        
+        gdat.inptL = gdat.inptfoldL
+        # temp
+        gdat.inptG = gdat.inptfoldG
+        
+        
+        # divide into training and testing
+        numbdatatest = int(gdat.fractest * gdat.numbdata)
 
-            gdat.inpttestR = gdat.inptR[:numbdatatest, :] # R for raw --> global
-            gdat.inpttranR = gdat.inptR[numbdatatest:, :]
+        gdat.inpttestG = gdat.inptG[:numbdatatest, :] # R for raw --> global
+        gdat.inpttranG = gdat.inptG[numbdatatest:, :]
 
-            gdat.inpttestF = gdat.inptF[:numbdatatest, :] # F for folded --> local
-            gdat.inpttranF = gdat.inptF[numbdatatest:, :]
+        gdat.inpttestL = gdat.inptL[:numbdatatest, :] # F for folded --> local
+        gdat.inpttranL = gdat.inptL[numbdatatest:, :]
 
-            gdat.outptest = gdat.outp[:numbdatatest]
-            gdat.outptran = gdat.outp[numbdatatest:] 
+        gdat.outptest = gdat.outp[:numbdatatest]
+        gdat.outptran = gdat.outp[numbdatatest:] 
 
         print('test & train generated')
         
@@ -910,19 +1074,13 @@ def vary_one_paper( dataclass, \
                     else:
                         colr = 'b'
                     
-                    if gdat.phastype == 'raww':
-                        indx = gdat.indxtime
-                        axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-                    if gdat.phastype == 'fold':
-                        indx = gdat.indxtimebins
-                        axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-                    
                     if gdat.phastype == 'both':
-                        indxR = gdat.indxtime # for Raww part
-                        indxF = gdat.indxtimebins # for folded part
+                        # temp!!!
+                        # indx = gdat.indxtime # for Raww part
+                        indx = gdat.indxtimebins # for folded part
 
                         inv = 'g'
-                        axis.plot(indxR, gdat.inptR[k, :], str(colr+ 'o'), indxF, gdat.inptF[k, :], str(inv+ 'o'), ls='-', markersize=5, alpha=0.6, )
+                        axis.plot(indx, gdat.inptG[k, :], str(colr+ 'o'), indx, gdat.inptL[k, :], str(inv+ 'o'), ls='-', markersize=5, alpha=0.6, )
                     
                     
             plt.tight_layout()
@@ -930,14 +1088,14 @@ def vary_one_paper( dataclass, \
             plt.ylabel('data-input')
             plt.title('input vs time')
             plt.legend()
-            path = pathplot + 'inpt_%s%s%04d' % (zoomType, strgvarbChng, i) + strgtimestmp + '.pdf' 
+            path = pathplot + 'inpt_%04d' % (i) + strgtimestmp + '.pdf' 
             plt.savefig(path)
             plt.close()
         
 
 
         for t in range(len(gdat.indxruns)):
- 
+
             gdat.modl = modelfunc()
 
             # gdat.modl.summary()
@@ -945,13 +1103,11 @@ def vary_one_paper( dataclass, \
 
             prec, recal = thresh_paper(gdat)
         
-            if gdat.phastype == 'both':
-                loc_inptF = gdat.inpttestF[:,:,None]
-                loc_inptR = gdat.inpttestR[:,:,None]
-                y_pred = gdat.modl.predict([loc_inptF, loc_inptR])
+
+            loc_inptL = gdat.inpttestL[:,:,None]
+            loc_inptG = gdat.inpttestG[:,:,None]
+            y_pred = gdat.modl.predict([loc_inptL, loc_inptG])
                 
-            else:
-                y_pred = gdat.modl.predict(gdat.inpttest)
 
             y_real = gdat.outptest
             auc = roc_auc_score(y_real, y_pred)
@@ -979,8 +1135,8 @@ def vary_one_paper( dataclass, \
             plt.savefig(path)
             plt.close()
 
-            #temp
-            break
+
+        
 
 # to vary thresholds on a multi-input model
 def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
