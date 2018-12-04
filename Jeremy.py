@@ -46,7 +46,7 @@ fractest = 0.3
 numbepoc = 1
 indxepoc = np.arange(numbepoc)
 
-numbruns = 1
+numbruns = 100
 
 indxepoc = np.arange(numbepoc)
 indxruns = np.arange(numbruns)
@@ -444,6 +444,7 @@ def gen_fitted_model(inptL, inptG, outp, model):
 
     return None
 
+# NEEDS TO BE RERUN WITH PROPER THRESH VALS
 def gen_metr(inptL, inptG, outp, fitmodel):
 
     if isinstance(inptL, str):
@@ -495,7 +496,7 @@ def gen_metr(inptL, inptG, outp, fitmodel):
             inptL = inptL[:, :, None]
             inptG = inptG[:, :, None]
 
-            for threshold in range(len(thresh)):
+            for threshold in thresh:
 
                 precise, recalling = True, True
 
@@ -640,61 +641,77 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
 
     fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
 
+    numbdatatest = int(fractest * numbdata)
 
+    inpttestL = inptL[:numbdatatest, :]
+    inpttranL = inptL[numbdatatest:, :]
 
+    inpttestG = inptG[:numbdatatest, :]
+    inpttranG = inptG[numbdatatest:, :]
 
-    for epoc in indxepoc:
+    outptest = outp[:numbdatatest]
+    outptran = outp[numbdatatest:]
+
+    for run in range(numbruns):
         
-        for threshold in range(len(thresh)):
-
-            for i in range(2):
-                # i == 0 -> train
-                # i == 1 -> test
-
+        # for threshold in thresh:
+        
+        for i in range(2):
+            # i == 0 : train
+            # i == 1 : test
+            
+            if i == 0:
+                inptL = inpttranL
+                inptG = inpttranG
+                outp = outptran
+                col = 'p'
                 
-                for k in indxdata:
-                    if k % 100 == 0:
-                        loclline = (localbinsindx, inptL[k, :])
-                        globlline = (globalbinsindx, inptG[k, :])
+            else:
+                inptL = inpttestL
+                inptG = inpttestG
+                outp = outptest
+                col = 'g'
+                
+            inptL = inptL[:,:,None]
+            inptG = inptG[:,:,None]
+            
+            outppred = (fitmodel.predict([inptL, inptG]) > 0.5).astype(int)
+            
+            matrconf = confusion_matrix(outp, outppred)
+            
+            if matrconf.size == 1:
+                matrconftemp = np.copy(matrconf)
+                matrconf = np.empty((2,2))
+                matrconf[0,0] = matrconftemp
+                
+            
+            trne = matrconf[0,0]
+            flpo = matrconf[0,1]
+            flne = matrconf[1,0]
+            trpo = matrconf[1,1]
 
 
-                        recal = metr[epoc, threshold, i, 2]
-                        prec = metr[epoc, threshold, i, 0]
 
-                        # if recal > -1 and prec > -1:
-                            # col = 'p'
-
-                        colR, colP = False, False
-
-                        if recal > -1:
-                            colR = 'r'
-                        
-                        if prec > -1:
-                            colP = 'b'
-
-                        if colP != False:
-                            axis[i,0].plot(loclline[0], loclline[1], globlline[0], globlline[1], marker='o', ls='', markersize=3, alpha=0.4, color=colP)
-
-                        if colR != False:
-                            axis[i,1].plot(loclline[0], loclline[1], globlline[0], globlline[1], marker='o', ls='', markersize=3, alpha=0.4, color=colR)
-
-
+            axis[0,0].plot(run, trne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
+            axis[0,1].plot(run, flpo, marker='o', ls='', markersize=3, alpha=0.1, color=col)
+            axis[1,0].plot(run, flne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
+            axis[1,1].plot(run, trne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
   
-    axis[0,0].set_title('Train & Precision')
-    axis[0,0].set_xlabel('Timebins Index')
-    axis[0,0].set_ylabel('Binned Flux')
+    axis[0,0].set_title('True Negative')
+    axis[0,0].set_xlabel('Run #')
+    axis[0,0].set_ylabel('Relative Flux')
 
-    axis[0,1].set_title('Train & Recall')
-    axis[0,1].set_xlabel('Timebins Index')
-    axis[0,1].set_ylabel('Binned Flux')
+    axis[0,1].set_title('False Positive')
+    axis[0,1].set_xlabel('Run #')
+    axis[0,1].set_ylabel('Relative Flux')
 
-    axis[1,0].set_title('Test & Precision')
-    axis[1,0].set_xlabel('Timebins Index')
-    axis[1,0].set_ylabel('Binned Flux')
+    axis[1,0].set_title('False Negative')
+    axis[1,0].set_xlabel('Run #')
+    axis[1,0].set_ylabel('Relative Flux')
 
-    axis[1,1].set_title('Test & Recall')
-    axis[1,1].set_xlabel('Timebins Index')
-    axis[1,1].set_ylabel('Binned Flux')
+    axis[1,1].set_title('True Positive')
+    axis[1,1].set_xlabel('Run #')
+    axis[1,1].set_ylabel('Relative Flux')
 
     plt.tight_layout()
     plt.show()
