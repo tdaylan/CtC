@@ -17,8 +17,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(context='poster', style='ticks', color_codes=True)
-import exop
-from exop import main as exopmain
+#import exop
+#from exop import main as exopmain
 
 class bind():
    
@@ -77,6 +77,27 @@ class bind():
         return np.asarray(final)
 
 
+
+def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
+    
+    timefold = ((time - epoc) / peri + 0.25) % 1.
+    
+    if zoomtype == 'glob':
+        minmtimefold = 0.
+        maxmtimefold = 1.
+    else:
+        minmtimefold = 0.15
+        maxmtimefold = 0.35
+    binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
+    indxtime = np.arange(numbtime)
+    fluxavgd = np.empty(numbtime)
+    for k in indxtime:
+        indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
+        fluxavgd[k] = np.mean(flux[indx])
+
+    return fluxavgd
+
+
 class gdatstrt(object):
     
     """
@@ -95,13 +116,19 @@ class gdatstrt(object):
         self.numbepoc = 20
     
         # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 10
+        self.numbruns = 3
 
         self.indxepoc = np.arange(self.numbepoc)
         self.indxruns = np.arange(self.numbruns)
 
         # a dictionary to hold the variable values for which the training will be repeated
         self.listvalu = {}
+        ## generative parameters of mock data
+        self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
+        # temp
+        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) 
+
+        self.listvalu['zoomtype'] = ['locl', 'glob']
         
         if self.datatype == 'simpmock':
             ## generative parameters of mock data

@@ -1,3 +1,5 @@
+
+
 import datetime, os, sys, argparse, random
 
 import numpy as np
@@ -13,7 +15,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 
 import keras
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, load_model
 from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten, Input, Concatenate, GlobalMaxPool1D
 
 import tensorflow as tf
@@ -26,6 +28,7 @@ import astropy as ap
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+# from matplotlib.pyplot.color import Purples, Greens
 
 import seaborn as sns
 
@@ -33,91 +36,76 @@ from IPython.display import HTML
 
 from exop import main as exopmain
 
-# ----------------------------------------------------------------------------------
 
-# DATACLASS
+# -----------------------------------------------------------------------------------
+# parameters
 
-class gdatstrt(object):
-    
-    """
-    init: Initializes all the testing data -- has all variables needed for testing
-    appdfcon: add a fully connected layer
-    appdcon1: add a 1D convolutional layer
-    retr_metr: returns all metrics of the network
-    """
-    
-    def __init__(self):
-    
-        # fraction of data samples that will be used to test the model
-        self.fractest = 0.1
-    
-        # number of epochs
-        self.numbepoc = 1
-    
-        # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 1
+# training param
+fractest = 0.3
 
-        self.indxepoc = np.arange(self.numbepoc)
-        self.indxruns = np.arange(self.numbruns)
+numbepoc = 1
+indxepoc = np.arange(numbepoc)
 
-        # a dictionary to hold the variable values for which the training will be repeated
-        self.listvalu = {}
-        ## generative parameters of mock data
-        self.listvalu['zoomtype'] = ['locl', 'glob']
+numbruns = 1
 
-        self.listvalu['numbtime'] = np.array([1e3, 3e1, 1e2, 3e2, 1e3]).astype(int)
-        # temp
-        self.listvalu['dept'] = 1 - np.array([(i+2)*10**(-3) for i in range(5)]) # 1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) 
+indxepoc = np.arange(numbepoc)
+indxruns = np.arange(numbruns)
 
-        self.listvalu['nois'] = np.array([0.03*(i+1)  for i in range(5)]) # SNR 10**(-2)*(i)
 
-        self.listvalu['numbdata'] = np.array([1e5, 1e4 , 3e3, 1e5, 3e5]).astype(int)
+# mockdata param
+datatype = 'here'
 
-        self.listvalu['fracplan'] = [0.5, 0.3 , 0.5, 0.7, 0.9] # frac P/N IDEAL BETWEEN .5-.7
+numbtime = 2001 # could maybe need to be 2001 to meet paper's specs
+dept = 0.998
+nois = 3e-3
+numbdata = int(1e4)
+fracplan = 0.2
 
-        ## hyperparameters
-        self.listvalu['numbdatabtch'] = [5, 10, 16, 20, 25] # IDEAL 16~25
-        ### number of layers
-        self.listvalu['numblayr'] = [1, 2, 2, 4, 5] # IDEAL 2 (FOR GLOBAL)
-        ### number of dimensions in each layer
-        self.listvalu['numbdimslayr'] = [240, 250, 260, 270, 280] # IDEAL IS ~256 || 280 (sacrifices speed a lot)
-        ### fraction of dropout in in each layer
-        self.listvalu['fracdrop'] = [0.38, 0.39, 0.42, 0.41, 0.42] # IDEAL is ~0.42
-        
-        # list of strings holding the names of the variables
-        self.liststrgvarb = self.listvalu.keys()
-        
-        self.numbvarb = len(self.liststrgvarb) # number of variables
-        self.indxvarb = np.arange(self.numbvarb) # array of all indexes to get any variable
-        
-        self.numbvalu = np.empty(self.numbvarb, dtype=int)
-        self.indxvalu = [[] for o in self.indxvarb]
-        for o, strgvarb in enumerate(self.liststrgvarb):
-            self.numbvalu[o] = len(self.listvalu[strgvarb])
-            self.indxvalu[o] = np.arange(self.numbvalu[o])
-    
+numbplan = int(numbdata * fracplan)
+numbnois = numbdata - numbplan
 
-        # dictionary to hold the metrics resulting from the runs
-        self.dictmetr = {}
-        self.liststrgmetr = ['prec', 'accu', 'reca']
-        self.listlablmetr = ['Precision', 'Accuracy', 'Recall']
-        self.liststrgrtyp = ['vali', 'tran']
-        self.listlablrtyp = ['Training', 'Validation']
-        self.numbrtyp = len(self.liststrgrtyp)
-        self.indxrtyp = np.arange(self.numbrtyp)
-        
-        for o, strgvarb in enumerate(self.liststrgvarb):
-            self.dictmetr[strgvarb] = np.empty((2, 3, self.numbruns, self.numbvalu[o]))
+indxtime = np.arange(numbtime)
+indxdata = np.arange(numbdata)
 
+path_namer_dict = {'numbtime': numbtime, 'dept' : dept, 'nois' : nois, 'numbdata' : numbdata, 'fracplan':fracplan}
+path_namer_str = ""
+for key, value in path_namer_dict.items():
+    paired = str(key) + str(value) + '_'
+    path_namer_str += paired
+
+
+
+# points for thresholds graphing
+points_thresh = 100
+thresh = [0.4 + i/(points_thresh*3) for i in range(points_thresh)]
+
+
+# binnig data
+paperloclinpt = 201      # input shape from paper [local val]
+papergloblinpt = 2001    # input shape from paper
+
+localtimebins = paperloclinpt
+globaltimebins = papergloblinpt
+
+localbinsindx = np.arange(localtimebins)
+globalbinsindx = np.arange(globaltimebins)
+
+
+
+# names for folded .dat files
+pathsavefoldLocl = path_namer_str + 'savefold_%s_%s_%04dbins' % (datatype, 'locl', localtimebins) + '.dat'
+pathsavefoldGlob = path_namer_str + 'savefold_%s_%s_%04dbins' % (datatype, 'glob', globaltimebins) + '.dat'
+pathsavefoldoutp = path_namer_str + 'savefold_%s_%s' % (datatype, 'outp') + '.dat'
+
+# name for pdf of inpt before running
+inptb4path = 'inpt_'+path_namer_str+'.pdf'
+
+pathsavemetr = path_namer_str + 'metr.npy'
 # -----------------------------------------------------------------------------------
 
 # CONVOLUTIONAL MODELS
 
 # models from "Scientific Domain Knowledge Improves Exoplanet Transit Classification with Deep Learning"
-
-paperloclinpt = 201      # input shape from paper [local val]
-papergloblinpt = 2001    # input shape from paper
-
 # astronet
 def exonet():
     loclinpt, globlinpt = 201, 2001 # hard coded for now
@@ -261,413 +249,12 @@ def reduced():
 
     return modlfinl
 
-
-# self-generative models 
-
-# can be called in 'vary___' functions
-def singleinput(dataclass,fracdropbool=True):
-    """
-    CURRENTLY ONLY DENSE LAYERS, COULD BE MORE MODULAR
-    dataclass : instance of gdat
-
-    layers : number of layers 
-
-    fracdropbool : true or false on doing the fracdrop
-    """
-
-    numbtime = dataclass.numbtime
-    numbdimslayr = dataclass.numbdimslayr
-    fracdrop = dataclass.fracdrop
-    layers = dataclass.numblayr
-    inptshape = dataclass.inpt.shape
-    unused, useddim = inptshape
-    
-
-    input_S = Input(shape=(useddim,), dtype='float32', name='input')
-
-    x = Dense(numbdimslayr, input_dim=numbtime, activation='relu')(input_S)
-    
-    if fracdropbool:
-        x = Dropout(fracdrop)(x)
-
-    for i in range(layers-1):
-        x = Dense(numbdimslayr, activation='relu')(x)
-        
-        if fracdropbool:
-            x = Dropout(fracdrop)(x)
-
-    finllayr = Dense(1, activation='sigmoid', name='finl')(x)
-    
-    modlfinl = Model(inputs=[input_S], outputs=[finllayr])
-
-    modlfinl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
-
-    return modlfinl
-
-# can't be called in 'vary___' functions yet
-def twoinput(dataclass, layers, fracdropbool=True):
-    """
-    CURRENTLY ONLY DENSE LAYERS, COULD BE MORE MODULAR
-    dataclass is an instance of gdat
-
-    layers is a list of layer quantities:
-        [0] := number of local
-        [1] := number of global
-        [2] := number after being combined 
-    """
-    numbtime = dataclass.numbtime
-    numbdimslayr = dataclass.numbdimslayr
-    fracdrop = dataclass.fracdrop
-    
-    # ----------------------------------------------------------------------------
-    localinput = Input(shape=(int(numbtime),), dtype='float32', name='localinput')
-
-    x = Dense(numbdimslayr, input_dim=numbtime, activation='relu')(localinput)
-    
-    if fracdropbool:
-        x = Dropout(fracdrop)(x)
-
-    for i in range(layers[0]-1):
-        x = Dense(numbdimslayr, activation='relu')(x)
-        
-        if fracdropbool:
-            x = Dropout(fracdrop)(x)
-
-
-    # -----------------------------------------------------------------------------
-    globalinput = Input(shape=(int(numbtime),), dtype='float32', name='globalinput')
-
-    y = Dense(numbdimslayr, input_dim=numbtime, activation='relu')(globalinput)
-    
-    if fracdropbool:
-        y = Dropout(fracdrop)(y)
-
-    for i in range(layers[1]-1):
-        y = Dense(numbdimslayr, activation='relu')(y)
-        
-        if fracdropbool:
-            y = Dropout(fracdrop)(y)
-
-    # ------------------------------------------------------------------------------
-    z = keras.layers.concatenate([x, y])
-
-    # ------------------------------------------------------------------------------
-    if layers[2] >=2:
-        z = Dense(numbdimslayr, activation='relu')(z)
-        
-        for i in range(layers[2]-2):
-            z = Dense(numbdimslayr, activation='relu')(z)
-
-    # ------------------------------------------------------------------------------
-    finllayr = Dense(1, activation='sigmoid', name='finl')(z)
-
-    # ------------------------------------------------------------------------------
-    modlfinl = Model(inputs=[localinput, globalinput], outputs=[finllayr])
-
-    modlfinl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
-
-    return modlfinl
-
-# ------------------------------------------------------------------------------------
-
-# GET-METRICS-THRU-VARIABLES
-
-def summgene(varb):
-    '''
-    convenience function to quickly print a numpy array
-    '''
-    
-    print (np.amin(varb))
-    print (np.amax(varb))
-    print (np.mean(varb))
-    print (varb.shape)
-
-def vary_all(dataclass, modelfunc, datatype='here'):
-    
-    '''
-    Function to explore the effect of hyper-parameters (and data properties for mock data) on binary classification metrics
-    '''
-    
-    # global object that will hold global variables
-    # this can be wrapped in a function to allow for customization 
-    # initialize the data here
-    gdat = dataclass
-
-    ## time stamp string
-    strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-    # print ('CtC explorer initialized at %s.' % strgtimestmp)
-    
-    ## path where plots will be generated
-    pathplot = os.environ['TDGU_DATA_PATH'] + '/'
-    
-    # temp
-    gdat.maxmindxvarb = 10
-
-    # for each run
-    for t in gdat.indxruns:
-        
-        # for each variable
-        for o, strgvarb in enumerate(gdat.liststrgvarb): 
-            
-            if o == gdat.maxmindxvarb:
-                break
-
-            pr_points = []
-
-            # for each value
-            for i in gdat.indxvalu[o]:
-
-                for strgvarbtemp in gdat.liststrgvarb: 
-                    setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][int(gdat.numbvalu[o]/2)])
-                setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
-                
-                # for strgvarbtemp in gdat.liststrgvarb: 
-                #print (strgvarb, getattr(gdat, strgvarb))
-
-                gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-                gdat.numbnois = gdat.numbdata - gdat.numbplan
-                
-                gdat.indxtime = np.arange(gdat.numbtime)
-                gdat.indxdata = np.arange(gdat.numbdata)
-                gdat.indxlayr = np.arange(gdat.numblayr)
-
-                # number of test data samples
-                gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
-                # number of training data samples
-                gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
-                # number of signal data samples
-                numbdataplan = int(gdat.numbdata * gdat.fracplan)
-                
-                if datatype == 'here':
-                    gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
-
-                if datatype == 'ete6':
-                    gdat.inpt, gdat.outp = exopmain.retr_ete6()                    
-
-
-                # divide the data set into training and test data sets
-                numbdatatest = int(gdat.fractest * gdat.numbdata)
-                gdat.inpttest = gdat.inpt[:numbdatatest, :]
-                gdat.outptest = gdat.outp[:numbdatatest]
-                gdat.inpttran = gdat.inpt[numbdatatest:, :]
-                gdat.outptran = gdat.outp[numbdatatest:]   
-                
-                gdat.modl = modelfunc(gdat, )
-                # gdat.modl.summary()
-                prec, recal = thresh(gdat, points=200)
-
-
-                y_pred = gdat.modl.predict(gdat.inpttest)
-                y_real = gdat.outptest
-                auc = roc_auc_score(y_real, y_pred)
-
-                
-                """
-                INCLUDE:
-                1) SIGNAL TO NOISE checkplus
-                2) GAUSSIAN STANDARD DEVIATION
-                3) DEPTH 
-                4) AUC checkplus
-                """
-                textstr = '\n'.join((
-                    r'$\mathrm{Signal:Noise}=%.2f$' % (gdat.dept/gdat.nois, ),
-                    # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
-                    r'$\mathrm{AUC}=%.8f$' % (auc, ),
-                    r'$\mathrm{Depth}=%.2f$' % (gdat.dept, )))
-            
-
-                figr, axis = plt.subplots()
-                axis.plot(prec, recal, marker='o', ls='', markersize=3, alpha=0.6)
-                axis.axhline(1, alpha=.5)
-                axis.axvline(1, alpha=.5)
-                props = dict(boxstyle='round', alpha=0.5)
-                axis.text(0.05, 0.25, textstr, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
-                plt.tight_layout()
-                plt.xlabel('Recall')
-                plt.ylabel('Precision')
-                plt.title('Precision v Recall, {0}{1}, {2}'.format(str(strgvarbChng), str(getattr(gdat, strgvarbChng)), zoomType))
-                # plt.legend()
-                path = pathplot + '{0}PvR_{1}_{2}{3}_'.format(t, zoomType, strgvarbChng, getattr(gdat, strgvarbChng)) + strgtimestmp + '.pdf' 
-                plt.savefig(path)
-                plt.close()
-                    
-
-    return strgtimestmp
-
-# this one works fine
-def vary_one(dataclass, strgvarbChng, modelfunc, datatype='here', zoomType='local'):
-    gdat = dataclass
-
-    ## time stamp string
-    strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    
-    ## path where plots will be generated
-    pathplot = os.environ['TDGU_DATA_PATH'] + '/'
-
-    # for each value
-    for i in range(len(gdat.listvalu[strgvarbChng])):
-
-        for strgvarbtemp in gdat.liststrgvarb:
-            if strgvarbtemp != strgvarbChng:
-                o = len(gdat.listvalu[strgvarbtemp]) 
-                setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][int(gdat.numbvalu[o]/2)])
-        setattr(gdat, strgvarbChng, gdat.listvalu[strgvarbChng][i])
-        
-        # print(gdat.listvalu[strgvarbChng][i])
-
-        
-        gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-        gdat.numbnois = gdat.numbdata - gdat.numbplan
-        
-        gdat.indxtime = np.arange(gdat.numbtime)
-        gdat.indxdata = np.arange(gdat.numbdata)
-        gdat.indxlayr = np.arange(gdat.numblayr)
-
-        # number of test data samples
-        gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
-        # number of training data samples
-        gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
-        # number of signal data samples
-        numbdataplan = int(gdat.numbdata * gdat.fracplan)
-        
-        if datatype == 'here':
-            gdat.inpt, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
-
-        if datatype == 'ete6':
-            gdat.inpt, gdat.outp = exopmain.retr_ete6()                    
-
-        # divide the data set into training and test data sets
-        numbdatatest = int(gdat.fractest * gdat.numbdata)
-        gdat.inpttest = gdat.inpt[:numbdatatest, :]
-        gdat.outptest = gdat.outp[:numbdatatest]
-        gdat.inpttran = gdat.inpt[numbdatatest:, :]
-        gdat.outptran = gdat.outp[numbdatatest:]   
-
-        """
-        # optional graphing of input light curves
-        figr, axis = plt.subplots() # figr unused
-        for k in gdat.indxdata:
-            if k < 10:
-                if gdat.outp[k] == 1:
-                    colr = 'r'
-                else:
-                    colr = 'b'
-                axis.plot(gdat.indxtime, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-        plt.tight_layout()
-        plt.xlabel('time')
-        plt.ylabel('data-input')
-        plt.title('input vs time')
-        plt.legend()
-        path = pathplot + 'inpt_%s%s%04d' % (zoomType, strgvarbChng, i) + strgtimestmp + '.pdf' 
-        plt.savefig(path)
-        plt.close()
-        """
-
-
-        for t in range(len(gdat.indxruns)):
- 
-            gdat.modl = modelfunc(gdat, )
-            # gdat.modl.summary()
-            prec, recal = thresh(gdat, points=200)
-
-
-            y_pred = gdat.modl.predict(gdat.inpttest)
-            y_real = gdat.outptest
-            auc = roc_auc_score(y_real, y_pred)
-
-            
-            """
-            INCLUDE:
-            1) SIGNAL TO NOISE checkplus
-            2) GAUSSIAN STANDARD DEVIATION
-            3) DEPTH 
-            4) AUC checkplus
-            """
-            textstr = '\n'.join((
-                r'$\mathrm{Signal:Noise}=%.2f$' % (gdat.dept/gdat.nois, ),
-                # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
-                r'$\mathrm{AUC}=%.8f$' % (auc, ),
-                r'$\mathrm{Depth}=%.2f$' % (gdat.dept, )))
-        
-
-            figr, axis = plt.subplots()
-            axis.plot(prec, recal, marker='o', ls='', markersize=3, alpha=0.6)
-            axis.axhline(1, alpha=.5)
-            axis.axvline(1, alpha=.5)
-            props = dict(boxstyle='round', alpha=0.5)
-            axis.text(0.05, 0.25, textstr, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
-            plt.tight_layout()
-            plt.xlabel('Recall')
-            plt.ylabel('Precision')
-            plt.title('Precision v Recall, {0}{1}, {2}'.format(str(strgvarbChng), str(getattr(gdat, strgvarbChng)), zoomType))
-            # plt.legend()
-            path = pathplot + '{0}PvR_{1}_{2}{3}_'.format(t, zoomType, strgvarbChng, getattr(gdat, strgvarbChng)) + strgtimestmp + '.pdf' 
-            plt.savefig(path)
-            plt.close()
-
-# this varies over threshold values
-def thresh(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
-    
-    pointsX = []
-    pointsY = []
-    thresholds = [0.3 + i/(points*2) for i in range(points)]
-    modelinst = dataclass.modl
-    
-    for y in dataclass.indxepoc:
-        
-        modelinst.fit(dataclass.inpt, dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
-        
-        for r in dataclass.indxrtyp:
-            if r==0:
-                inpt = dataclass.inpttran
-                outp = dataclass.outptran
-            else:
-                inpt = dataclass.inpttest
-                outp = dataclass.outptest
-
-            inpt = inpt[:, :]
-
-             
-            for i in thresholds:
-                
-
-                outppred = (modelinst.predict(inpt) > i).astype(int)
-                matrconf = confusion_matrix(outp, outppred)
-
-                if matrconf.size == 1:
-                    matrconftemp = np.copy(matrconf)
-                    matrconf = np.empty((2, 2))
-                    matrconf[0, 0] = matrconftemp
-
-                trne = matrconf[0, 0]
-                flpo = matrconf[0, 1]
-                flne = matrconf[1, 0]
-                trpo = matrconf[1, 1]
-
-                
-
-                if float(trpo + flpo) > 0:
-                    Precision = trpo / float(trpo + flpo) # precision
-                else:
-                    Precision = 0
-                    # print ('No positive found...')
-                    # raise Exception('')
-                # metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne) # accuracy
-                if float(trpo + flne) > 0:
-                    Recall = trpo / float(trpo + flne) # recall
-                else:
-                    Recall = 0
-                    # raise Exception('')
-
-                if Precision == 0 and Recall == 0:
-                    pass
-                    
-                else:
-                    pointsX.append(Precision)
-                    pointsY.append(Recall)
-    return pointsX, pointsY
-
+# these need to have the same name but path has ()
+# path = reduced()
+modl = exonet
+
+modlpath = 'exonet_' + path_namer_str + '.h5'
+# -----------------------------------------------------------------------------------
 
 # binning
 def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
@@ -692,537 +279,457 @@ def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
 
     # print('\nfluxavgd after: \n', fluxavgd)
     
-    whereNan = np.isnan(fluxavgd)
-    fluxavgd[whereNan] = 0
     # print(fluxavgd)
     return fluxavgd
 
+# -----------------------------------------------------------------------------------
 
-# to vary on paper models
-def vary_one_paper( dataclass, \
-                    strgvarbChng, \
-                    modelfunc, \
-                    datatype='here', \
-                    zoomType='locl', \
-                    saveinpt=False, \
-                    numbtimebins=201):
+# get the saved data
+def gen_mockdata(datatype):
     
-    gdat = dataclass
+    pathname = path_namer_str
 
-    ## time stamp string
-    strgtimestmp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+    if datatype == 'here':
+        inptraww, outp, peri = exopmain.retr_datamock(numbplan=numbplan,\
+                numbnois=numbnois, numbtime=numbtime, dept=dept, nois=nois)
+
+        pathname += '_here.npz'
+        np.savez(pathname, inptraww, outp, peri)
+
+    elif datatype == 'ete6':
+        time, inptraww, outp, tici, peri = exopmain.retr_dataete6(nois=nois, \
+                                            numbdata=numbdata)
+        
+        pathname += '_ete6.npz'
+        np.savez(pathname, time, inptraww, outp, tici, peri)
     
-    ## path where plots will be generated
-    pathplot = os.environ['TDGU_DATA_PATH'] + '/'
+    return pathname
+
+# bin and save
+def gen_binned(path_namer, datatype):
     
+    if datatype == 'here':
+        loaded = np.load(path_namer+'_'+datatype+'.npz')
 
-    # NEW
-    os.system('mkdir -p %s' % pathplot)
+        inptraww, outp, peri = loaded['arr_0'], loaded['arr_1'], loaded['arr_2']
+        # temp [hasn't been specified]
+        time = np.arange(0,30)
 
-    gdat.numbtimebins = numbtimebins # set to 201 to replicate paper
-    gdat.indxtimebins = np.arange(gdat.numbtimebins)
+    elif datatype == 'ete6':
+        loaded = np.load(path_namer+'_'+datatype+'.npz')
 
-    # temp
-    gdat.maxmindxvarb = 10
-    # END NEW
+        time, inptraww, outp, tici, peri = loaded['arr_0'], loaded['arr_1'], loaded['arr_2'], loaded['arr_3'], loaded['arr_4']
 
-    if strgvarbChng != None:
-        # for each value
-        for i in range(len(gdat.listvalu[strgvarbChng])):
+    inptloclfold = np.empty((numbdata,localtimebins))
+    inptglobfold = np.empty((numbdata, globaltimebins))
 
-            for strgvarbtemp in gdat.liststrgvarb:
-                if strgvarbtemp != strgvarbChng:
-                    # set all but the varying variable to their mid-value
-                    # o = len(gdat.listvalu[strgvarbtemp]) 
+    cntr = 0
+    for k in indxdata:
+        # temp, dunno if this is right idea for peri [only uses first peri]
+        numbperi = peri[cntr].size
+        indxperi = np.arange(numbperi)
+
+        inptloclfold[k,:] = binn_lcur(localtimebins, time, inptraww[k,:], abs(peri[k%len(peri)]), 0., zoomtype='locl')
+        inptglobfold[k,:] = binn_lcur(globaltimebins, time, inptraww[k,:], abs(peri[k%len(peri)]), 0., zoomtype='glob')
+
+    np.savetxt(pathsavefoldLocl, inptloclfold)
+    np.savetxt(pathsavefoldGlob, inptglobfold)
+    np.savetxt(pathsavefoldoutp, outp)
+
+    print('Writing local folded to %s...' % pathsavefoldLocl)
+    print('Writing global folded to %s...' % pathsavefoldGlob)
+    print('Writing output to %s...' % pathsavefoldoutp)
+
+    return None
 
 
-                    # BIG TEMP
-                    # only setting the very first element of each gdat.listvalu !!!
-                    setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
+def inpt_before_train(locl, glob, outp, saveinpt=True, returner=False):
+    
+    inptL = np.loadtxt(locl)
+    inptG = np.loadtxt(glob)
+    outp  = np.loadtxt(outp)
 
-            setattr(gdat, strgvarbChng, gdat.listvalu[strgvarbChng][i])
+    
+    if saveinpt:
+        fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6)) 
+        for k in indxdata:
             
-            gdat.zoomtype = zoomType # currently hard-coded!!
-            
-            gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-            gdat.numbnois = gdat.numbdata - gdat.numbplan
-            
-            gdat.indxtime = np.arange(gdat.numbtime)
-            gdat.indxdata = np.arange(gdat.numbdata)
-            gdat.indxlayr = np.arange(gdat.numblayr)
-
-            # number of test data samples
-            gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
-            # number of training data samples
-            gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
-            # number of signal data samples
-            numbdataplan = int(gdat.numbdata * gdat.fracplan)
-
-
-            temps = pathplot + 'temp_valz.npz'
-            if not os.path.exists(temps):
+            if k%2 == 0:
+                if outp[k] == 1:
+                    colr = 'r'
+                else:
+                    colr = 'b'
                 
-                if datatype == 'here':
-                    # TEMP
-                    # BREAKS: GDAT.NUMBTIME BY SETTING FIXED VALUES HERE
-                    # MAKES: RAWWR AND RAWWF HAVE SET TIMES AS SEEN IN PAPER
+                localline = (localbinsindx, inptL[k, :])
+                globalline = (globalbinsindx, inptG[k, :])
 
-                    # rawwR needs 2001 numbtime
-                    gdat.inptraww, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
-                        numbnois=gdat.numbnois, numbtime=2001, dept=gdat.dept, nois=gdat.nois)
 
-                    # rawwF needs 201 numbtime
-                    """
-                    gdat.inptrawwF, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
-                        numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
-                    """
-
-                    rawinpt, output, period = gdat.inptraww, gdat.outp, gdat.peri
-                    
-                    np.savez(temps, rawinpt, output, period)
+                axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
+                axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
                 
+        axis[0].set_title('Local')
+        axis[1].set_title('Global')
 
-                elif datatype == 'ete6':
-                    print ('gdat.numbdata',gdat.numbdata)
-                    gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
-                                                                                numbdata=gdat.numbdata, nois=gdat.nois)
-            
+        axis[0].set_xlabel('Timebins Index')
+        axis[0].set_ylabel('Binned Flux')
 
-            else:
-                tempdata = np.load(temps)
-                gdat.inptraww, gdat.outp, gdat.peri = tempdata['arr_0'], tempdata['arr_1'], tempdata['arr_2']
-            
-            
-            # TEMP!
-            # will work in days so this is about a month
-            gdat.time = np.arange(0, 30) # will change when masking
+        axis[1].set_xlabel('Timebins Index')
+        axis[1].set_ylabel('Binned Flux')
 
+        
+        plt.tight_layout()
 
-            gdat.inptR = gdat.inptraww
-            
-            pathsavefold = pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat'
-            
-            #temp true
-            if not os.path.exists(pathsavefold):
-                cntr = 0
-                gdat.inptfold = np.empty((gdat.numbdata, gdat.numbtimebins))
-                for k in gdat.indxdata:
-                    numbperi = gdat.peri[cntr].size
-                    indxperi = np.arange(numbperi)
-                    
-                    # temp -- only uses the first period
-                    
-                    """
-                    print('\ngdat.inptfold')
-                    summgene(gdat.inptfold)
-                    print('\ngdat.inptraww')
-                    summgene(gdat.inptraww)
-                    print('\ngdat.peri[k]: ', gdat.peri[k%len(gdat.peri)])
-            
-                    print('\n\n\n\n')
-                    """
+        
+        plt.savefig(inptb4path)
+        plt.close()
+    """
 
-                    # this might have broken everything
-                    # cntr+=1
-                    # cntr = cntr%len(gdat.peri)
-                    
-                    # edited gdat.peri[k][0] to gdat.peri[k] 
-                    gdat.inptfold[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype=gdat.zoomtype)                                                                                                                       
+    if saveinpt:
+        # fig, axis = plt.subplots(figsize=(12,6)) 
+        plt.figure(1)
+        
+        for k in indxdata:
             
-                print ('Writing to %s...' % pathsavefold)
-                np.savetxt(pathsavefold, gdat.inptfold)
-            else:
-                print ('Reading from %s...' % pathsavefold)
-                gdat.inptfold = np.loadtxt(pathsavefold)
-            
-            gdat.inptF = gdat.inptfold
-            
-            
-            # divide into training and testing
-            numbdatatest = int(gdat.fractest * gdat.numbdata)
-
-            gdat.inpttestR = gdat.inptR[:numbdatatest, :] # R for raw --> global
-            gdat.inpttranR = gdat.inptR[numbdatatest:, :]
-
-            gdat.inpttestF = gdat.inptF[:numbdatatest, :] # F for folded --> local
-            gdat.inpttranF = gdat.inptF[numbdatatest:, :]
-
-            gdat.outptest = gdat.outp[:numbdatatest]
-            gdat.outptran = gdat.outp[numbdatatest:] 
-
-            print('test & train generated')
-            
-            # optional graphing of input light curves
-            if saveinpt:
-                figr, axis = plt.subplots() # figr unused
-                for k in gdat.indxdata:
-                    if k < 10:
-                        if gdat.outp[k] == 1:
-                            colr = 'r'
-                        else:
-                            colr = 'b'
-                        
-                        if gdat.phastype == 'raww':
-                            indx = gdat.indxtime
-                            axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-                        if gdat.phastype == 'fold':
-                            indx = gdat.indxtimebins
-                            axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-                        
-                        if gdat.phastype == 'both':
-                            indxR = gdat.indxtime # for Raww part
-                            indxF = gdat.indxtimebins # for folded part
-
-                            inv = 'g'
-                            axis.plot(indxR, gdat.inptR[k, :], str(colr+ 'o'), indxF, gdat.inptF[k, :], str(inv+ 'o'), ls='-', markersize=5, alpha=0.6, )
-                        
-                        
-                plt.tight_layout()
-                plt.xlabel('time')
-                plt.ylabel('data-input')
-                plt.title('input vs time')
+            if k < 1000:
+                if outp[k] == 1:
+                    colr = 'r'
+                else:
+                    colr = 'b'
+                localline = (localbinsindx, inptL[k, :])
+                globalline = (globalbinsindx, inptG[k, :])
+                
+                plt.subplot(211)
+                plt.plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
+                plt.xlabel('Timebins')
+                plt.ylabel('Flux')
                 plt.legend()
-                path = pathplot + 'inpt_%s%s%04d' % (zoomType, strgvarbChng, i) + strgtimestmp + '.pdf' 
-                plt.savefig(path)
-                plt.close()
-            
 
+                plt.subplot(212)
+                plt.plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
+                plt.xlabel('Timebins')
+                plt.ylabel('Flux')
+                plt.legend()
 
-            for t in range(len(gdat.indxruns)):
+        plt.tight_layout()
+
+        # path = 'inpt_indx_'+str(k)+path_namer_str+'.pdf'
+        plt.show()
+        # plt.savefig(path)
+        # plt.close()
+        """
+    if returner:
+        return inptL, inptG, outp
+
+def gen_fitted_model(inptL, inptG, outp, model):
     
-                gdat.modl = modelfunc()
+    if isinstance(inptL, str):
+        inptL = np.loadtxt(inptL)
+    if isinstance(inptG, str):
+        inptG = np.loadtxt(inptG)
+    if isinstance(outp, str):
+        outp  = np.loadtxt(outp)
 
-                # gdat.modl.summary()
-                print('running thresholds for {}'.format(t))
+    modl = model()
 
-                prec, recal = thresh_paper(gdat)
-            
-                if gdat.phastype == 'both':
-                    loc_inptF = gdat.inpttestF[:,:,None]
-                    loc_inptR = gdat.inpttestR[:,:,None]
-                    y_pred = gdat.modl.predict([loc_inptF, loc_inptR])
-                    
-                else:
-                    y_pred = gdat.modl.predict(gdat.inpttest)
-
-                y_real = gdat.outptest
-                auc = roc_auc_score(y_real, y_pred)
-
-
-                textstr = '\n'.join((
-                    r'$\mathrm{Signal:Noise}=%.2f$' % (gdat.dept/gdat.nois, ),
-                    # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
-                    r'$\mathrm{AUC}=%.8f$' % (auc, ),
-                    r'$\mathrm{Depth}=%.2f$' % (gdat.dept, )))
-            
-
-                figr, axis = plt.subplots()
-                axis.plot(prec, recal, marker='o', ls='', markersize=3, alpha=0.6)
-                axis.axhline(1, alpha=.5)
-                axis.axvline(1, alpha=.5)
-                props = dict(boxstyle='round', alpha=0.5)
-                axis.text(0.05, 0.25, textstr, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
-                plt.tight_layout()
-                plt.xlabel('Recall')
-                plt.ylabel('Precision')
-                plt.title('Precision v Recall, {0}{1}, {2}'.format(str(strgvarbChng), str(getattr(gdat, strgvarbChng)), zoomType))
-                # plt.legend()
-                path = pathplot + '{0}PvR_{1}_{2}{3}_'.format(t, zoomType, strgvarbChng, getattr(gdat, strgvarbChng)) + strgtimestmp + '.pdf' 
-                plt.savefig(path)
-                plt.close()
-
-                #temp
-                
-    else:
-        for strgvarbtemp in gdat.liststrgvarb:
-            # BIG TEMP
-            # only setting the very first element of each gdat.listvalu !!!
-            setattr(gdat, strgvarbtemp, gdat.listvalu[strgvarbtemp][0])    # [int(gdat.numbvalu[o]/2)])
-        
-
-        
-        gdat.zoomtype = zoomType # currently hard-coded!!
-        
-        gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-        gdat.numbnois = gdat.numbdata - gdat.numbplan
-        
-        gdat.indxtime = np.arange(gdat.numbtime)
-        gdat.indxdata = np.arange(gdat.numbdata)
-        gdat.indxlayr = np.arange(gdat.numblayr)
-
-        # number of test data samples
-        gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
-        # number of training data samples
-        gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
-        # number of signal data samples
-        numbdataplan = int(gdat.numbdata * gdat.fracplan)
-
-
-        temps = pathplot + 'temp_valz.npz'
-        if not os.path.exists(temps):
-            
-            if datatype == 'here':
-                # TEMP
-                # BREAKS: GDAT.NUMBTIME BY SETTING FIXED VALUES HERE
-                # MAKES: RAWWR AND RAWWF HAVE SET TIMES AS SEEN IN PAPER
-
-                # rawwR needs 2001 numbtime
-                gdat.inptraww, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
-                    numbnois=gdat.numbnois, numbtime=2001, dept=gdat.dept, nois=gdat.nois)
-
-                # rawwF needs 201 numbtime
-                """
-                gdat.inptrawwF, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbplan, \
-                    numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
-                """
-
-                rawinpt, output, period = gdat.inptraww, gdat.outp, gdat.peri
-                
-                np.savez(temps, rawinpt, output, period)
-            
-
-            elif datatype == 'ete6':
-                print ('gdat.numbdata',gdat.numbdata)
-                gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_ete6(gdat.phastype, \
-                                                                            numbdata=gdat.numbdata, nois=gdat.nois)
-        
-
-        else:
-            tempdata = np.load(temps)
-            gdat.inptraww, gdat.outp, gdat.peri = tempdata['arr_0'], tempdata['arr_1'], tempdata['arr_2']
-        
-        
-        # TEMP!
-        # will work in days so this is about a month
-        gdat.time = np.arange(0, 30) # will change when masking
-
-        #fix raw to global; fold to local
-
-
-        gdat.inptR = gdat.inptraww
-        
-        pathsavefoldLocl = pathplot + 'savefold_%s%s%04d' % (datatype, 'locl', gdat.numbtimebins) + '.dat'
-        pathsavefoldGlob = pathplot + 'savefold_%s%s%04d' % (datatype, 'glob', gdat.numbtimebins) + '.dat'
-        #temp true
-        if not (os.path.exists(pathsavefoldLocl) and os.path.exists(pathsavefoldGlob)):
-            cntr = 0
-            gdat.inptfoldL = np.empty((gdat.numbdata, gdat.numbtimebins))
-            gdat.inptfoldG = np.empty((gdat.numbdata, gdat.numbtimebins))
-            for k in gdat.indxdata:
-                numbperi = gdat.peri[cntr].size
-                indxperi = np.arange(numbperi)
-                
-                # temp -- only uses the first period
-                
-                """
-                print('\ngdat.inptfold')
-                summgene(gdat.inptfold)
-                print('\ngdat.inptraww')
-                summgene(gdat.inptraww)
-                print('\ngdat.peri[k]: ', gdat.peri[k%len(gdat.peri)])
-        
-                print('\n\n\n\n')
-                """
-
-                # this might have broken everything
-                # cntr+=1
-                # cntr = cntr%len(gdat.peri)
-                
-                # edited gdat.peri[k][0] to gdat.peri[k] 
-                gdat.inptfoldL[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype='locl') 
-                # temp      
-                # timebins for global might need to be different from local?                                                                                                                
-                gdat.inptfoldG[k, :] = binn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k%len(gdat.peri)]), 0., zoomtype='glob')                                                                                                                     
-            print ('Writing to %s...' % pathsavefoldLocl)
-            np.savetxt(pathsavefoldLocl, gdat.inptfoldL)
-            # temp
-            print ('Writing to %s...' % pathsavefoldGlob)
-            np.savetxt(pathsavefoldGlob, gdat.inptfoldG)
-        else:
-            print ('Reading from %s...' % pathsavefoldLocl)
-            gdat.inptfoldL = np.loadtxt(pathsavefoldLocl)
-            # temp
-            print ('Reading from %s...' % pathsavefoldGlob)
-            gdat.inptfoldG = np.loadtxt(pathsavefoldGlob)
-        
-        gdat.inptL = gdat.inptfoldL
-        # temp
-        gdat.inptG = gdat.inptfoldG
-        
-        
-        # divide into training and testing
-        numbdatatest = int(gdat.fractest * gdat.numbdata)
-
-        gdat.inpttestG = gdat.inptG[:numbdatatest, :] # R for raw --> global
-        gdat.inpttranG = gdat.inptG[numbdatatest:, :]
-
-        gdat.inpttestL = gdat.inptL[:numbdatatest, :] # F for folded --> local
-        gdat.inpttranL = gdat.inptL[numbdatatest:, :]
-
-        gdat.outptest = gdat.outp[:numbdatatest]
-        gdat.outptran = gdat.outp[numbdatatest:] 
-
-        print('test & train generated')
-        
-        # optional graphing of input light curves
-        if saveinpt:
-            figr, axis = plt.subplots() # figr unused
-            for k in gdat.indxdata:
-                if k < 10:
-                    if gdat.outp[k] == 1:
-                        colr = 'r'
-                    else:
-                        colr = 'b'
-                    
-                    if gdat.phastype == 'both':
-                        # temp!!!
-                        # indx = gdat.indxtime # for Raww part
-                        indx = gdat.indxtimebins # for folded part
-
-                        inv = 'g'
-                        axis.plot(indx, gdat.inptG[k, :], str(colr+ 'o'), indx, gdat.inptL[k, :], str(inv+ 'o'), ls='-', markersize=5, alpha=0.6, )
-                    
-                    
-            plt.tight_layout()
-            plt.xlabel('time')
-            plt.ylabel('data-input')
-            plt.title('input vs time')
-            plt.legend()
-            path = pathplot + 'inpt_%04d' % (i) + strgtimestmp + '.pdf' 
-            plt.savefig(path)
-            plt.close()
-        
-
-
-        for t in range(len(gdat.indxruns)):
-
-            gdat.modl = modelfunc()
-
-            # gdat.modl.summary()
-            print('running thresholds for {}'.format(t))
-
-            prec, recal = thresh_paper(gdat)
-        
-
-            loc_inptL = gdat.inpttestL[:,:,None]
-            loc_inptG = gdat.inpttestG[:,:,None]
-            y_pred = gdat.modl.predict([loc_inptL, loc_inptG])
-                
-
-            y_real = gdat.outptest
-            auc = roc_auc_score(y_real, y_pred)
-
-
-            textstr = '\n'.join((
-                r'$\mathrm{Signal:Noise}=%.2f$' % (gdat.dept/gdat.nois, ),
-                # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
-                r'$\mathrm{AUC}=%.8f$' % (auc, ),
-                r'$\mathrm{Depth}=%.2f$' % (gdat.dept, )))
-        
-
-            figr, axis = plt.subplots()
-            axis.plot(prec, recal, marker='o', ls='', markersize=3, alpha=0.6)
-            axis.axhline(1, alpha=.5)
-            axis.axvline(1, alpha=.5)
-            props = dict(boxstyle='round', alpha=0.5)
-            axis.text(0.05, 0.25, textstr, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
-            plt.tight_layout()
-            plt.xlabel('Recall')
-            plt.ylabel('Precision')
-            plt.title('Precision v Recall, {0}{1}, {2}'.format(str(strgvarbChng), str(getattr(gdat, strgvarbChng)), zoomType))
-            # plt.legend()
-            path = pathplot + '{0}PvR_{1}_{2}{3}_'.format(t, zoomType, strgvarbChng, getattr(gdat, strgvarbChng)) + strgtimestmp + '.pdf' 
-            plt.savefig(path)
-            plt.close()
-
-
-        
-
-# to vary thresholds on a multi-input model
-def thresh_paper(dataclass, points=100, indxvaluthis=None, strgvarbthis=None):
+    #got rid of: for y in indxepoc:
+    inptfitL = inptL[:, :, None]
+    inptfitG = inptG[:, :, None]
     
-    pointsX = []
-    pointsY = []
-    thresholds = [0.5 + i/(points*3) for i in range(points)]
-    modelinst = dataclass.modl
-    
-    for y in dataclass.indxepoc:
-        
-        if dataclass.phastype == 'both':
-            inptF = dataclass.inptF[:, :, None]
-            inptR = dataclass.inptR[:, :, None]
-            
-            modelinst.fit([inptF, inptR], dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
-        else: 
-            modelinst.fit(dataclass.inpt, dataclass.outp, epochs=dataclass.numbepoc, batch_size=dataclass.numbdatabtch, validation_split=dataclass.fractest, verbose=1)
-        
-        for r in dataclass.indxrtyp:
-            if dataclass.phastype == 'both':
-                if r==0:
-                    inptF = dataclass.inpttranF
-                    inptR = dataclass.inpttranR
-                    outp = dataclass.outptran
+    hist = modl.fit([inptfitL, inptfitG], outp, epochs=numbepoc, validation_split=fractest, verbose=2)
 
-                else:
-                    inptF = dataclass.inpttestF
-                    inptR = dataclass.inpttestR
-                    outp = dataclass.outptest
+    modl.save(modlpath)
 
-                inptF = inptF[:, :, None]
-                inptR = inptR[:, :, None]
+
+    print(hist.history)
+
+    return None
+
+def gen_metr(inptL, inptG, outp, fitmodel):
+
+    if isinstance(inptL, str):
+        inptL = np.loadtxt(inptL)
+    if isinstance(inptG, str):
+        inptG = np.loadtxt(inptG)
+    if isinstance(outp, str):
+        outp  = np.loadtxt(outp)
+
+    if isinstance(fitmodel, str):
+        # in case the fitmodel is being taken as the output from gen_fitted_model
+        fitmodel = load_model(fitmodel)
+
+    metr = np.zeros((numbepoc, len(thresh), 2, 3)) - 1
+
+    numbdatatest = int(fractest * numbdata)
+
+    inpttestL = inptL[:numbdatatest, :]
+    inpttranL = inptL[numbdatatest:, :]
+
+    inpttestG = inptG[:numbdatatest, :]
+    inpttranG = inptG[numbdatatest:, :]
+
+    outptest = outp[:numbdatatest]
+    outptran = outp[numbdatatest:]
+
+    # print('Test and Train Generated')
+    # print(fitmodel.summary())
+
+    for epoc in indxepoc:
+        
+
+        for i in range(2):
+            # i == 0 -> train
+            # i == 1 -> test
+
+            if i == 0:
+                inptL = inpttranL
+                inptG = inpttranG
+                outp = outptran
+                inptcol = 'p' # this needs to be bumped into the graphing section
 
             else:
-                if r==0:
-                    inpt = dataclass.inpttran
-                    outp = dataclass.outptran
+                inptL = inpttestL
+                inptG = inpttestG
+                outp = outptest
+                inptcol = 'g' # this needs to be bumped into the graphing section
 
-                else:
-                    inpt = dataclass.inpttest
-                    outp = dataclass.outptest
+            inptL = inptL[:, :, None]
+            inptG = inptG[:, :, None]
 
-                inpt = inpt[:, :]
-             
-            for i in thresholds:
-                
-                if dataclass.phastype == 'both':
-                    # print(modelinst.predict([inptF, inptR]))
-                    outppred = (modelinst.predict([inptF, inptR]) > i).astype(int)
+            for threshold in range(len(thresh)):
 
-                else:
-                    outppred = (modelinst.predict(inpt) > i).astype(int)
-                
+                precise, recalling = True, True
+
+                outppred = (fitmodel.predict([inptL, inptG]) > threshold).astype(int)
+
                 matrconf = confusion_matrix(outp, outppred)
-                
+
                 if matrconf.size == 1:
                     matrconftemp = np.copy(matrconf)
-                    matrconf = np.empty((2, 2))
-                    matrconf[0, 0] = matrconftemp
+                    matrconf = np.empty((2,2))
+                    matrconf[0,0] = matrconftemp
 
-                trne = matrconf[0, 0]
-                flpo = matrconf[0, 1]
-                flne = matrconf[1, 0]
-                trpo = matrconf[1, 1]
+                trne = matrconf[0,0]
+                flpo = matrconf[0,1]
+                flne = matrconf[1,0]
+                trpo = matrconf[1,1]
 
-                
 
                 if float(trpo + flpo) > 0:
-                    Precision = trpo / float(trpo + flpo) # precision
+                    metr[epoc, threshold, i, 0] = trpo / float(trpo + flpo) # precision
                 else:
-                    Precision = 0
-                    # print ('No positive found...')
-                    # raise Exception('')
-                # metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne) # accuracy
-                if float(trpo + flne) > 0:
-                    Recall = trpo / float(trpo + flne) # recall
-                else:
-                    Recall = 0
-                    # raise Exception('')
+                    precise = False
 
-                if Precision == 0 and Recall == 0:
-                    pass
-                    
+                metr[epoc, threshold, i, 1] = float(trpo + trne)/(trpo + flpo + trne) # accuracy
+
+                if float(trpo + flne) > 0:
+                    metr[epoc, threshold, i, 2] = trpo / float(trpo + flne) # recall
                 else:
-                    pointsX.append(Precision)
-                    pointsY.append(Recall)
-    return pointsX, pointsY
+                    recalling = False
+                
+                if not precise and not recalling:
+                    pass
+                    """print('inptL')
+                    summgene(inptL)
+                    print('inptG')
+                    summgene(inptG) 
+                    print('outppred')
+                    summgene(outppred)
+                    print('confusion matrix\n', matrconf)"""
+                
+                else:
+                    statement = 'viable'
+                    
+
+                if precise and recalling:
+                    statement += ' and great!'
+
+                try: 
+                    print(statement)
+                finally:
+                    pass
+    
+    np.save(pathsavemetr, metr)
+    
+    return None
+
+def summgene(varb):
+    '''
+    convenience function to quickly print a numpy array
+    '''
+    
+    print ('min', np.amin(varb))
+    print ('max', np.amax(varb))
+    print ('mean', np.mean(varb))
+    print ('shape', varb.shape)
+
+def graph_PvR(inptL, inptG, outp, fitmodel, metr):
+    
+    if isinstance(inptL, str):
+        inptL = np.loadtxt(inptL)
+    if isinstance(inptG, str):
+        inptG = np.loadtxt(inptG)
+    if isinstance(outp, str):
+        outp  = np.loadtxt(outp)
+
+    if isinstance(fitmodel, str):
+        # in case the fitmodel is being taken as the output from gen_fitted_model
+        fitmodel = load_model(fitmodel)
+
+    metr = np.load(pathsavemetr)
+
+
+    inptL = inptL[:,:,None]
+    inptG = inptG[:,:,None]
+    y_pred = fitmodel.predict([inptL, inptG])
+
+    y_real = outp
+
+    auc = 0 # roc_auc_score(y_real, y_pred)
+
+    textbox = '\n'.join((
+        r'$\mathrm{Signal:Noise}=%.2f$' % (dept/nois, ),
+        # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
+        r'$\mathrm{AUC}=%.8f$' % (auc, ),
+        r'$\mathrm{Depth}=%.2f$' % (dept, )))
+    
+
+
+    x_points = []
+    y_points = []
+
+
+    for epoc in indxepoc:
+        for i in range(2):
+            for threshold in range(len(thresh)):
+                
+                x, y = metr[epoc, threshold, i, 2], metr[epoc, threshold, i, 0]
+
+                if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
+                    x_points.append(x) # recall
+                    y_points.append(y) # precision
+
+
+    fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
+    axis.plot(x_points, y_points, marker='o', ls='', markersize=3, alpha=0.6)
+    axis.axhline(1, alpha=.4)
+    axis.axvline(1, alpha=.4)
+    props = dict(boxstyle='round', alpha=0.4)
+    axis.text(0.05, 0.25, textbox, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+    plt.tight_layout()
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision v Recall')
+    plt.show()
+
+
+def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
+
+    if isinstance(inptL, str):
+        inptL = np.loadtxt(inptL)
+    if isinstance(inptG, str):
+        inptG = np.loadtxt(inptG)
+    if isinstance(outp, str):
+        outp  = np.loadtxt(outp)
+
+    if isinstance(fitmodel, str):
+        # in case the fitmodel is being taken as the output from gen_fitted_model
+        fitmodel = load_model(fitmodel)
+
+    metr = np.load(pathsavemetr)
+
+
+    fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
+
+
+
+
+    for epoc in indxepoc:
+        
+        for threshold in range(len(thresh)):
+
+            for i in range(2):
+                # i == 0 -> train
+                # i == 1 -> test
+
+                
+                for k in indxdata:
+                    if k % 100 == 0:
+                        loclline = (localbinsindx, inptL[k, :])
+                        globlline = (globalbinsindx, inptG[k, :])
+
+
+                        recal = metr[epoc, threshold, i, 2]
+                        prec = metr[epoc, threshold, i, 0]
+
+                        # if recal > -1 and prec > -1:
+                            # col = 'p'
+
+                        colR, colP = False, False
+
+                        if recal > -1:
+                            colR = 'r'
+                        
+                        if prec > -1:
+                            colP = 'b'
+
+                        if colP != False:
+                            axis[i,0].plot(loclline[0], loclline[1], globlline[0], globlline[1], marker='o', ls='', markersize=3, alpha=0.4, color=colP)
+
+                        if colR != False:
+                            axis[i,1].plot(loclline[0], loclline[1], globlline[0], globlline[1], marker='o', ls='', markersize=3, alpha=0.4, color=colR)
+
+
+  
+    axis[0,0].set_title('Train & Precision')
+    axis[0,0].set_xlabel('Timebins Index')
+    axis[0,0].set_ylabel('Binned Flux')
+
+    axis[0,1].set_title('Train & Recall')
+    axis[0,1].set_xlabel('Timebins Index')
+    axis[0,1].set_ylabel('Binned Flux')
+
+    axis[1,0].set_title('Test & Precision')
+    axis[1,0].set_xlabel('Timebins Index')
+    axis[1,0].set_ylabel('Binned Flux')
+
+    axis[1,1].set_title('Test & Recall')
+    axis[1,1].set_xlabel('Timebins Index')
+    axis[1,1].set_ylabel('Binned Flux')
+
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
+
+
+
+
+# --------------------------------------------------------------------------------
+
+# script
+if not os.path.exists(path_namer_str+'_{}.npz'.format(datatype)):
+    mockdata = gen_mockdata(datatype)
+
+else:
+    mockdata = path_namer_str+'_{}.npz'.format(datatype)
+
+if not os.path.exists(pathsavefoldLocl):
+    gen_binned(path_namer_str, datatype)
+
+if not os.path.exists(inptb4path):
+    inpt_before_train(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp)
+
+if not os.path.exists(modlpath):
+    gen_fitted_model(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp, modl)
+
+if not os.path.exists(pathsavemetr):
+    gen_metr(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath)
+
+graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
+
+
+
 
