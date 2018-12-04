@@ -4,15 +4,15 @@ import datetime, os, sys, argparse, random
 
 import numpy as np
 
-import torch
-import torch.nn as nn
-import torch.nn.parallel
-import torch.backends.cudnn as cudnn
-import torch.optim as optim
-import torch.utils.data
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-import torchvision.utils as vutils
+#import torch
+#import torch.nn as nn
+#import torch.nn.parallel
+#import torch.backends.cudnn as cudnn
+#import torch.optim as optim
+#import torch.utils.data
+#import torchvision.datasets as dset
+#import torchvision.transforms as transforms
+#import torchvision.utils as vutils
 
 import keras
 from keras.models import Sequential, Model, load_model
@@ -283,6 +283,11 @@ def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
     return fluxavgd
 
 # -----------------------------------------------------------------------------------
+
+#lcurobjt = lightkurve.lightcurve.LightCurve(flux=gdat.lcurdata[k], time=gdat.time[k], flux_err=flux_err, time_format='jd', time_scale='utc')
+#lcurobjt.flatten()
+#lcurobjt.fold(peri)
+#lcurobjt.bin(numbtimebins)
 
 # get the saved data
 def gen_mockdata(datatype):
