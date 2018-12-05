@@ -80,7 +80,7 @@ points_thresh = 100
 thresh = [0.4 + i/(points_thresh*3) for i in range(points_thresh)]
 
 
-# binnig data
+# binning data
 paperloclinpt = 201      # input shape from paper [local val]
 papergloblinpt = 2001    # input shape from paper
 
