@@ -1,18 +1,6 @@
-
-
 import datetime, os, sys, argparse, random
 
 import numpy as np
-
-#import torch
-#import torch.nn as nn
-#import torch.nn.parallel
-#import torch.backends.cudnn as cudnn
-#import torch.optim as optim
-#import torch.utils.data
-#import torchvision.datasets as dset
-#import torchvision.transforms as transforms
-#import torchvision.utils as vutils
 
 import keras
 from keras.models import Sequential, Model, load_model
@@ -27,12 +15,8 @@ import astropy as ap
 
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-# from matplotlib.pyplot.color import Purples, Greens
 
 import seaborn as sns
-
-from IPython.display import HTML
 
 from exop import main as exopmain
 
