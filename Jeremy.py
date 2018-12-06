@@ -613,7 +613,7 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 
             print("Epoch: {0}, ".format(epoc) + typstr)
 
-            pbar = ProgressBar(widgets=widgets, maxval=len(indexes))
+            pbar = ProgressBar(widgets=widgets, maxval=len(thresh))
             pbar.start()   
 
             for threshold in range(len(thresh)):
@@ -623,6 +623,9 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
                 if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
                     x_points.append(x) # recall
                     y_points.append(y) # precision
+
+                pbar.update(threshold)
+            pbar.finish()
 
 
     fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
@@ -643,7 +646,7 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
         plt.show()
 
 
-def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
+def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 
     if isinstance(inptL, str):
         inptL = np.loadtxt(inptL)
@@ -671,6 +674,10 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
 
     outptest = outp[:numbdatatest]
     outptran = outp[numbdatatest:]
+
+    print("Graphing inpt based on conf_matr")
+    pbar = ProgressBar(widgets=widgets, maxval=numbruns)
+    pbar.start()  
 
     for run in range(numbruns):
         
@@ -716,6 +723,9 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
             axis[0,1].plot(run, flpo, marker='o', ls='', markersize=3, alpha=0.1, color=col)
             axis[1,0].plot(run, flne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
             axis[1,1].plot(run, trne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
+
+        pbar.update(run)
+    pbar.finish()
   
     axis[0,0].set_title('True Negative')
     axis[0,0].set_xlabel('Run #')
@@ -734,12 +744,12 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
     axis[1,1].set_ylabel('Relative Flux')
 
     plt.tight_layout()
-    plt.show()
 
-
-
-
-
+    if saveinpt:
+        plt.savefig('inptspace_confmatr' + inptb4path)
+        plt.close()
+    else:
+        plt.show()
 
 
 
