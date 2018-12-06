@@ -1,5 +1,5 @@
 import datetime, os, sys, argparse, random
-
+from progressbar import *
 import numpy as np
 
 import keras
@@ -23,6 +23,13 @@ import lightkurve
 from exop import main as exopmain
 
 
+widgets = ['Test: ', Percentage(), ' ', Bar(marker='0',left='[',right=']'),
+           ' ', ETA(), ' ', FileTransferSpeed()]
+
+
+
+
+
 # -----------------------------------------------------------------------------------
 # parameters
 
@@ -41,7 +48,7 @@ indxruns = np.arange(numbruns)
 # mockdata param
 datatype = 'here'
 
-numbtime = 2001 # could maybe need to be 2001 to meet paper's specs
+numbtime = 2000 # could maybe need to be 2001 to meet paper's specs
 dept = 0.998
 nois = 3e-3
 numbdata = int(1e4)
@@ -67,8 +74,8 @@ thresh = [0.4 + i/(points_thresh*3) for i in range(points_thresh)]
 
 
 # binning data
-paperloclinpt = 201      # input shape from paper [local val]
-papergloblinpt = 2001    # input shape from paper
+paperloclinpt = 200      # input shape from paper [local val]
+papergloblinpt = 2000    # input shape from paper
 
 localtimebins = paperloclinpt
 globaltimebins = papergloblinpt
@@ -315,16 +322,27 @@ def gen_binned(path_namer, datatype):
     inptloclfold = np.empty((numbdata,localtimebins))
     inptglobfold = np.empty((numbdata, globaltimebins))
 
+    print("Generating binned")
+
+    pbar = ProgressBar(widgets=widgets, maxval=len(indxdata))
+    pbar.start()
+
     cntr = 0
     for k in indxdata:
         # temp, dunno if this is right idea for peri [only uses first peri]
         numbperi = peri[cntr].size
         indxperi = np.arange(numbperi)
 
-        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(localtimebins)
-        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(globaltimebins)
+        # tester = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(1).bin(10)
 
+        # print(len(inptloclfold[k,:]), len(tester.flux))
+        
+        
+        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(10).flux # hard coded
+        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(1).flux # hard coded
+        pbar.update(k)
 
+    pbar.finish()
 
     np.savetxt(pathsavefoldLocl, inptloclfold)
     np.savetxt(pathsavefoldGlob, inptglobfold)
@@ -337,86 +355,62 @@ def gen_binned(path_namer, datatype):
     return None
 
 
-def inpt_before_train(locl, glob, outp, saveinpt=True, returner=False):
+def inpt_before_train(locl, glob, outp, saveinpt=True):
     
     inptL = np.loadtxt(locl)
     inptG = np.loadtxt(glob)
     outp  = np.loadtxt(outp)
 
     
-    if saveinpt:
-        fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6)) 
-        for k in indxdata:
-            
-            if k%(len(indxdata)/10) == 0:
-                if outp[k] == 1:
-                    colr = 'r'
-                else:
-                    colr = 'b'
-                
-                localline = (localbinsindx, inptL[k, :])
-                globalline = (globalbinsindx, inptG[k, :])
 
+    fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6)) 
+     
 
-                axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
-                axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
-                
-                axis[0].set_title('Local')
-                axis[1].set_title('Global')
+    # gives just 10 plots
+    indexer = len(indxdata)/10
+    indexes = indxdata[0::indexer]
 
-                axis[0].set_xlabel('Timebins Index')
-                axis[0].set_ylabel('Binned Flux')
+    print("Making input graphs!")
 
-                axis[1].set_xlabel('Timebins Index')
-                axis[1].set_ylabel('Binned Flux')
+    pbar = ProgressBar(widgets=widgets, maxval=len(indexes))
+    pbar.start()   
 
-                
-                plt.tight_layout()
-
-                if saveinpt:
-                    plt.savefig('{}_'.format(k) + inptb4path)
-                
-                else:
-                    plt.show()
-                plt.close()
-    """
-
-    if saveinpt:
-        # fig, axis = plt.subplots(figsize=(12,6)) 
-        plt.figure(1)
+    for k in indexes:
+        if outp[k] == 1:
+            colr = 'r'
+        else:
+            colr = 'b'
         
-        for k in indxdata:
-            
-            if k < 1000:
-                if outp[k] == 1:
-                    colr = 'r'
-                else:
-                    colr = 'b'
-                localline = (localbinsindx, inptL[k, :])
-                globalline = (globalbinsindx, inptG[k, :])
-                
-                plt.subplot(211)
-                plt.plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
-                plt.xlabel('Timebins')
-                plt.ylabel('Flux')
-                plt.legend()
+        localline = (localbinsindx, inptL[k, :])
+        globalline = (globalbinsindx, inptG[k, :])
 
-                plt.subplot(212)
-                plt.plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
-                plt.xlabel('Timebins')
-                plt.ylabel('Flux')
-                plt.legend()
 
+        axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
+        axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
+        
+        axis[0].set_title('Local')
+        axis[1].set_title('Global')
+
+        axis[0].set_xlabel('Timebins Index')
+        axis[0].set_ylabel('Binned Flux')
+
+        axis[1].set_xlabel('Timebins Index')
+        axis[1].set_ylabel('Binned Flux')
+
+        
         plt.tight_layout()
 
-        # path = 'inpt_indx_'+str(k)+path_namer_str+'.pdf'
-        plt.show()
-        # plt.savefig(path)
-        # plt.close()
-        """
-    if returner:
-        return inptL, inptG, outp
-
+        if saveinpt:
+            plt.savefig('{}_'.format(k) + inptb4path)
+            plt.close()
+        
+        else:
+            plt.show()
+        
+        pbar.update(k)
+    pbar.finish()
+    return None    
+    
 def gen_fitted_model(inptL, inptG, outp, model):
     
     if isinstance(inptL, str):
@@ -468,8 +462,7 @@ def gen_metr(inptL, inptG, outp, fitmodel):
     outptest = outp[:numbdatatest]
     outptran = outp[numbdatatest:]
 
-    # print('Test and Train Generated')
-    # print(fitmodel.summary())
+    print("Generating Metric Matrix")
 
     for epoc in indxepoc:
         
@@ -482,22 +475,27 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                 inptL = inpttranL
                 inptG = inpttranG
                 outp = outptran
-                inptcol = 'p' # this needs to be bumped into the graphing section
+                inptcol = 'train' 
 
             else:
                 inptL = inpttestL
                 inptG = inpttestG
                 outp = outptest
-                inptcol = 'g' # this needs to be bumped into the graphing section
+                inptcol = 'test' 
 
             inptL = inptL[:, :, None]
             inptG = inptG[:, :, None]
+            
+            print("Epoch {0}, ".format(epoc) + inptcol)
 
-            for threshold in thresh:
+            pbar = ProgressBar(widgets=widgets, maxval=len(thresh))
+            pbar.start()
+
+            for threshold in range(len(thresh)):
 
                 precise, recalling = True, True
 
-                outppred = (fitmodel.predict([inptL, inptG]) > threshold).astype(int)
+                outppred = (fitmodel.predict([inptL, inptG]) > thresh[threshold]).astype(int)
 
                 matrconf = confusion_matrix(outp, outppred)
 
@@ -510,6 +508,7 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                 flpo = matrconf[0,1]
                 flne = matrconf[1,0]
                 trpo = matrconf[1,1]
+                
 
 
                 if float(trpo + flpo) > 0:
@@ -523,16 +522,16 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                     metr[epoc, threshold, i, 2] = trpo / float(trpo + flne) # recall
                 else:
                     recalling = False
-                
+                """
                 if not precise and not recalling:
                     pass
-                    """print('inptL')
+                    print('inptL')
                     summgene(inptL)
                     print('inptG')
                     summgene(inptG) 
                     print('outppred')
                     summgene(outppred)
-                    print('confusion matrix\n', matrconf)"""
+                    print('confusion matrix\n', matrconf)
                 
                 else:
                     statement = 'viable'
@@ -545,6 +544,8 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                     print(statement)
                 finally:
                     pass
+                """
+            pbar.finish()
     
     np.save(pathsavemetr, metr)
     
@@ -560,7 +561,7 @@ def summgene(varb):
     print ('mean', np.mean(varb))
     print ('shape', varb.shape)
 
-def graph_PvR(inptL, inptG, outp, fitmodel, metr):
+def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
     
     if isinstance(inptL, str):
         inptL = np.loadtxt(inptL)
@@ -582,7 +583,11 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr):
 
     y_real = outp
 
-    auc = 0 # roc_auc_score(y_real, y_pred)
+    try:
+        auc = roc_auc_score(y_real, y_pred)
+    except:
+        print('y_pred is bad :(')
+        auc = 0.
 
     textbox = '\n'.join((
         r'$\mathrm{Signal:Noise}=%.2f$' % (dept/nois, ),
@@ -598,6 +603,19 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr):
 
     for epoc in indxepoc:
         for i in range(2):
+            
+            if i == 0:
+                typstr = 'test'
+
+            else:
+                typstr = 'train'
+
+
+            print("Epoch: {0}, ".format(epoc) + typstr)
+
+            pbar = ProgressBar(widgets=widgets, maxval=len(indexes))
+            pbar.start()   
+
             for threshold in range(len(thresh)):
                 
                 x, y = metr[epoc, threshold, i, 2], metr[epoc, threshold, i, 0]
@@ -617,7 +635,12 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr):
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.title('Precision v Recall')
-    plt.show()
+
+    if saveinpt:
+        plt.savefig('PvR{0}.pdf'.format(path_namer_str))
+        plt.close()
+    else:
+        plt.show()
 
 
 def graph_inpt_space(inptL, inptG, outp, fitmodel, metr):
@@ -734,7 +757,7 @@ if not os.path.exists(pathsavefoldLocl):
     gen_binned(path_namer_str, datatype)
 
 inpt_before_train(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp)
-
+"""
 if not os.path.exists(modlpath):
     gen_fitted_model(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp, modl)
 
