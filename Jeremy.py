@@ -338,8 +338,8 @@ def gen_binned(path_namer, datatype):
         # print(len(inptloclfold[k,:]), len(tester.flux))
         
         
-        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(10).flux # hard coded
-        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(1).flux # hard coded
+        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(30).bin(10).flux # hard coded
+        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(30).bin(1).flux # hard coded
         pbar.update(k)
 
     pbar.finish()
@@ -360,21 +360,18 @@ def inpt_before_train(locl, glob, outp, saveinpt=True):
     inptL = np.loadtxt(locl)
     inptG = np.loadtxt(glob)
     outp  = np.loadtxt(outp)
-
-    
-
-    fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6)) 
+ 
      
 
     # gives just 10 plots
-    indexer = len(indxdata)/10
+    indexer = int(len(indxdata)/10)
     indexes = indxdata[0::indexer]
 
     print("Making input graphs!")
 
     pbar = ProgressBar(widgets=widgets, maxval=len(indexes))
     pbar.start()   
-
+    pbarcounter = 0
     for k in indexes:
         if outp[k] == 1:
             colr = 'r'
@@ -383,6 +380,9 @@ def inpt_before_train(locl, glob, outp, saveinpt=True):
         
         localline = (localbinsindx, inptL[k, :])
         globalline = (globalbinsindx, inptG[k, :])
+
+        
+        fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6))
 
 
         axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
@@ -402,12 +402,13 @@ def inpt_before_train(locl, glob, outp, saveinpt=True):
 
         if saveinpt:
             plt.savefig('{}_'.format(k) + inptb4path)
-            plt.close()
+            
         
         else:
             plt.show()
         
-        pbar.update(k)
+        pbar.update(pbarcounter)
+        pbarcounter += 1
     pbar.finish()
     return None    
     
