@@ -235,9 +235,9 @@ def reduced():
 
 # these need to have the same name but path has ()
 # path = reduced()
-modl = exonet
+modl = reduced
 
-modlpath = 'exonet_' + path_namer_str + '.h5'
+modlpath = 'reduced_' + path_namer_str + '.h5'
 # -----------------------------------------------------------------------------------
 
 # binning
