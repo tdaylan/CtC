@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt
 
 import seaborn as sns
 
+import lightkurve
+
 from exop import main as exopmain
 
 
@@ -77,14 +79,14 @@ globalbinsindx = np.arange(globaltimebins)
 
 
 # names for folded .dat files
-pathsavefoldLocl = path_namer_str + 'savefold_%s_%s_%04dbins' % (datatype, 'locl', localtimebins) + '.dat'
-pathsavefoldGlob = path_namer_str + 'savefold_%s_%s_%04dbins' % (datatype, 'glob', globaltimebins) + '.dat'
-pathsavefoldoutp = path_namer_str + 'savefold_%s_%s' % (datatype, 'outp') + '.dat'
+pathsavefoldLocl = 'savefold_%s_%s_%04dbins' % (datatype, 'locl', localtimebins) + path_namer_str +  '.dat'
+pathsavefoldGlob = 'savefold_%s_%s_%04dbins' % (datatype, 'glob', globaltimebins) + path_namer_str + '.dat'
+pathsavefoldoutp = 'savefold_%s_%s' % (datatype, 'outp') + path_namer_str + '.dat'
 
 # name for pdf of inpt before running
 inptb4path = 'inpt_'+path_namer_str+'.pdf'
 
-pathsavemetr = path_namer_str + 'metr.npy'
+pathsavemetr = 'metr_' + path_namer_str + '.npy'
 # -----------------------------------------------------------------------------------
 
 # CONVOLUTIONAL MODELS
@@ -240,7 +242,8 @@ modl = reduced
 modlpath = 'reduced_' + path_namer_str + '.h5'
 # -----------------------------------------------------------------------------------
 
-# binning
+# binning TOO SLOW
+"""
 def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
     
     timefold = ((time - epoc) / peri + 0.25) % 1.
@@ -265,7 +268,7 @@ def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
     
     # print(fluxavgd)
     return fluxavgd
-
+"""
 # -----------------------------------------------------------------------------------
 
 #lcurobjt = lightkurve.lightcurve.LightCurve(flux=gdat.lcurdata[k], time=gdat.time[k], flux_err=flux_err, time_format='jd', time_scale='utc')
@@ -318,8 +321,10 @@ def gen_binned(path_namer, datatype):
         numbperi = peri[cntr].size
         indxperi = np.arange(numbperi)
 
-        inptloclfold[k,:] = binn_lcur(localtimebins, time, inptraww[k,:], abs(peri[k%len(peri)]), 0., zoomtype='locl')
-        inptglobfold[k,:] = binn_lcur(globaltimebins, time, inptraww[k,:], abs(peri[k%len(peri)]), 0., zoomtype='glob')
+        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(localtimebins)
+        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(abs(peri[k%len(peri)])).bin(globaltimebins)
+
+
 
     np.savetxt(pathsavefoldLocl, inptloclfold)
     np.savetxt(pathsavefoldGlob, inptglobfold)
@@ -343,7 +348,7 @@ def inpt_before_train(locl, glob, outp, saveinpt=True, returner=False):
         fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6)) 
         for k in indxdata:
             
-            if k%2 == 0:
+            if k%(len(indxdata)/10) == 0:
                 if outp[k] == 1:
                     colr = 'r'
                 else:
@@ -356,21 +361,24 @@ def inpt_before_train(locl, glob, outp, saveinpt=True, returner=False):
                 axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
                 axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
                 
-        axis[0].set_title('Local')
-        axis[1].set_title('Global')
+                axis[0].set_title('Local')
+                axis[1].set_title('Global')
 
-        axis[0].set_xlabel('Timebins Index')
-        axis[0].set_ylabel('Binned Flux')
+                axis[0].set_xlabel('Timebins Index')
+                axis[0].set_ylabel('Binned Flux')
 
-        axis[1].set_xlabel('Timebins Index')
-        axis[1].set_ylabel('Binned Flux')
+                axis[1].set_xlabel('Timebins Index')
+                axis[1].set_ylabel('Binned Flux')
 
-        
-        plt.tight_layout()
+                
+                plt.tight_layout()
 
-        
-        plt.savefig(inptb4path)
-        plt.close()
+                if saveinpt:
+                    plt.savefig('{}_'.format(k) + inptb4path)
+                
+                else:
+                    plt.show()
+                plt.close()
     """
 
     if saveinpt:
@@ -725,8 +733,7 @@ else:
 if not os.path.exists(pathsavefoldLocl):
     gen_binned(path_namer_str, datatype)
 
-if not os.path.exists(inptb4path):
-    inpt_before_train(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp)
+inpt_before_train(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp)
 
 if not os.path.exists(modlpath):
     gen_fitted_model(pathsavefoldLocl, pathsavefoldGlob,pathsavefoldoutp, modl)
@@ -735,7 +742,7 @@ if not os.path.exists(pathsavemetr):
     gen_metr(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath)
 
 graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
-
+"""
 
 
 
