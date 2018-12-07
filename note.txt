@@ -65,3 +65,4 @@ export $PYTHONPATH=$PYTOHPATH:/path/to/thefolderwhereyouhaveexopandctc
 - connected exop.py to CtC, got rid of data generation inside CtC
 - added numblayr, numbdimslayr and fracdrop hyperparameters
 
+
