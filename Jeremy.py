@@ -87,6 +87,7 @@ localbinsindx = np.arange(localtimebins)
 globalbinsindx = np.arange(globaltimebins)
 
 
+# pathdata = os.environ['CTHC_DATA_PATH'] + '/'
 
 # names for folded .dat files
 pathsavefoldLocl = 'savefold_%s_%s_%04dbins' % (datatype, 'locl', localtimebins) + path_namer_str +  '.dat'
@@ -250,41 +251,6 @@ def reduced():
 modl = reduced
 
 modlpath = 'reduced_' + path_namer_str + '.h5'
-# -----------------------------------------------------------------------------------
-
-# binning TOO SLOW
-"""
-def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
-    
-    timefold = ((time - epoc) / peri + 0.25) % 1.
-    
-    if zoomtype == 'glob':
-        minmtimefold = 0.
-        maxmtimefold = 1.
-    else:
-        minmtimefold = 0.15
-        maxmtimefold = 0.35
-    binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
-    indxtime = np.arange(numbtime)
-    fluxavgd = np.empty(numbtime)
-
-    # print('\nfluxavgd before: \n', fluxavgd)
-
-    for k in indxtime:
-        indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
-        fluxavgd[k] = np.mean(flux[indx])
-
-    # print('\nfluxavgd after: \n', fluxavgd)
-    
-    # print(fluxavgd)
-    return fluxavgd
-"""
-# -----------------------------------------------------------------------------------
-
-#lcurobjt = lightkurve.lightcurve.LightCurve(flux=gdat.lcurdata[k], time=gdat.time[k], flux_err=flux_err, time_format='jd', time_scale='utc')
-#lcurobjt.flatten()
-#lcurobjt.fold(peri)
-#lcurobjt.bin(numbtimebins)
 
 # get the saved data
 def gen_mockdata(datatype):
@@ -294,6 +260,22 @@ def gen_mockdata(datatype):
     if datatype == 'here':
         inptraww, outp, peri = exopmain.retr_datamock(numbplan=numbplan,\
                 numbnois=numbnois, numbtime=numbtime, dept=dept, nois=nois)
+
+        pathname += '_here.npz'
+        np.savez(pathname, inptraww, outp, peri)
+
+    if datatype == 'tess':
+        # read period from tess_tce_sector1_2.csv
+        #outp, peri = 
+        #columns of this file are
+
+        # TIC ID, TOI ID, disposition aka label, 
+        # read inptraww from the file
+        inptraww, outp, peri = 
+        path = 'tess2018234235059-s0002-0000000012421161-0121-s_lc.fits'
+
+        objt = lightkurve.lightcurvefile.TessLightCurveFile(path)
+        objt.flatten().flux
 
         pathname += '_here.npz'
         np.savez(pathname, inptraww, outp, peri)
@@ -378,7 +360,8 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(10).flux)
+            temp = tester.flatten().fold(peritemp).bin(10)
+            ax.plot(temp.time, temp.flux)
             ax.set_title('Globally Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
@@ -387,7 +370,8 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(100).flux)
+            temp = tester.flatten().fold(peritemp).bin(100)
+            ax.plot(temp.time, temp.flux)
             ax.set_title('Locally Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
