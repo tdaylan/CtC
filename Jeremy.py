@@ -48,7 +48,10 @@ indxruns = np.arange(numbruns)
 # mockdata param
 datatype = 'here'
 
-numbtime = 2000 # could maybe need to be 2001 to meet paper's specs
+numbtime = 20000 # could maybe need to be 2001 to meet paper's specs
+
+# find bin numb to get both 2001 and 201 with (we don't care about) remainders!
+
 dept = 0.998
 nois = 3e-3
 numbdata = int(1e4)
@@ -75,7 +78,7 @@ thresh = [0.4 + i/(points_thresh*3) for i in range(points_thresh)]
 
 # binning data
 paperloclinpt = 200      # input shape from paper [local val]
-papergloblinpt = 2000    # input shape from paper
+papergloblinpt = 2000   # input shape from paper
 
 localtimebins = paperloclinpt
 globaltimebins = papergloblinpt
@@ -101,7 +104,7 @@ pathsavemetr = 'metr_' + path_namer_str + '.npy'
 # models from "Scientific Domain Knowledge Improves Exoplanet Transit Classification with Deep Learning"
 # astronet
 def exonet():
-    loclinpt, globlinpt = 201, 2001 # hard coded for now
+    loclinpt, globlinpt = 200, 2000 # hard coded for now
     padX = 'same'
     padY = 'valid'
 
@@ -180,7 +183,7 @@ def exonet():
 
 # 
 def reduced():
-    loclinpt, globlinpt = 201, 2001 # hard coded for now
+    loclinpt, globlinpt = 200, 2000 # hard coded for now
     padX = 'same'
     padY = 'same'
 
@@ -327,19 +330,71 @@ def gen_binned(path_namer, datatype):
     pbar = ProgressBar(widgets=widgets, maxval=len(indxdata))
     pbar.start()
 
-    cntr = 0
+    # cntr = 0
     for k in indxdata:
         # temp, dunno if this is right idea for peri [only uses first peri]
-        numbperi = peri[cntr].size
-        indxperi = np.arange(numbperi)
+        # numbperi = peri[cntr].size
+        # indxperi = np.arange(numbperi)
 
-        # tester = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(1).bin(10)
+        tester = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc')
 
         # print(len(inptloclfold[k,:]), len(tester.flux))
         
+        # only fold the planets by peri[k]
+        if k < numbplan:
+            peritemp = int(peri[k])
+        else:
+            peritemp = 10
+
+        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(peritemp).bin(100).flux # BIN hard coded (fix soon)
+        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(peritemp).bin(10).flux # BIN hard coded
         
-        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(30).bin(10).flux # hard coded
-        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(30).bin(1).flux # hard coded
+        if k < 10:
+            fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
+            ax.plot(tester.time, tester.flux)
+            ax.set_title('untouched')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Flux')
+            plt.tight_layout()
+            plt.savefig('untouched{}'.format(k) + inptb4path)
+            plt.close()
+
+            fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
+            ax.plot(tester.time, tester.flatten().flux)
+            ax.set_title('Flattened')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Flux')
+            plt.tight_layout()
+            plt.savefig('flattened{}'.format(k) + inptb4path)
+            plt.close()            
+            
+            fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
+            ax.plot(tester.time, tester.flatten().fold(peritemp).flux)
+            ax.set_title('Folded')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Flux')
+            plt.tight_layout()
+            plt.savefig('folded{}'.format(k) + inptb4path)
+            plt.close()
+
+            fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
+            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(10).flux)
+            ax.set_title('Globally Folded')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Flux')
+            plt.tight_layout()
+            plt.savefig('glob{}'.format(k) + inptb4path)
+            plt.close()
+
+            fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
+            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(100).flux)
+            ax.set_title('Locally Folded')
+            ax.set_xlabel('Time')
+            ax.set_ylabel('Flux')
+            plt.tight_layout()
+            plt.savefig('locl{}'.format(k) + inptb4path)
+            plt.close()
+
         pbar.update(k)
 
     pbar.finish()
@@ -692,18 +747,18 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
                 inptL = inpttranL
                 inptG = inpttranG
                 outp = outptran
-                col = 'p'
+                col = 'r'
                 
             else:
                 inptL = inpttestL
                 inptG = inpttestG
                 outp = outptest
-                col = 'g'
+                col = 'b'
                 
             inptL = inptL[:,:,None]
             inptG = inptG[:,:,None]
             
-            outppred = (fitmodel.predict([inptL, inptG]) > 0.5).astype(int)
+            outppred = (fitmodel.predict([inptL, inptG]) > 0.7).astype(int)
             
             matrconf = confusion_matrix(outp, outppred)
             
@@ -758,11 +813,7 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 # --------------------------------------------------------------------------------
 
 # script
-if not os.path.exists(path_namer_str+'_{}.npz'.format(datatype)):
-    mockdata = gen_mockdata(datatype)
-
-else:
-    mockdata = path_namer_str+'_{}.npz'.format(datatype)
+mockdata = gen_mockdata(datatype)
 
 if not os.path.exists(pathsavefoldLocl):
     gen_binned(path_namer_str, datatype)
@@ -775,7 +826,7 @@ if not os.path.exists(modlpath):
 if not os.path.exists(pathsavemetr):
     gen_metr(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath)
 
-graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
+graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr, saveinpt=False)
 
 
 
