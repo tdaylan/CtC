@@ -12,6 +12,9 @@ import sklearn
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
 import astropy as ap
+import astropy.io.fits as fits
+
+from scipy.interpolate import LSQUnivariateSpline
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -79,7 +82,16 @@ using datavalidation objects, so we cannot just read the lightcurve file in ligh
 
 so we just send the flux and time and pass them to the lightkurve arguments as we did before 
 
-    hdun[0] = 
+download the datavalidationfiles using shell script
+within for loop:
+    pick out file names using os.listdir 
+    fnmatch to filter out file names
+
+    ^^ set to path name
+
+    
+
+path = 
 """
 
 
@@ -101,8 +113,6 @@ indxepoc = np.arange(numbepoc)
 datatype = 'here'
 
 numbtime = 20000 # could maybe need to be 2001 to meet paper's specs
-
-# find bin numb to get both 2001 and 201 with (we don't care about) remainders!
 
 dept = 0.998
 nois = 3e-3
@@ -304,40 +314,6 @@ modl = reduced
 modlpath = 'reduced_' + path_namer_str + '.h5'
 # -----------------------------------------------------------------------------------
 
-# binning TOO SLOW
-"""
-def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
-    
-    timefold = ((time - epoc) / peri + 0.25) % 1.
-    
-    if zoomtype == 'glob':
-        minmtimefold = 0.
-        maxmtimefold = 1.
-    else:
-        minmtimefold = 0.15
-        maxmtimefold = 0.35
-    binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
-    indxtime = np.arange(numbtime)
-    fluxavgd = np.empty(numbtime)
-
-    # print('\nfluxavgd before: \n', fluxavgd)
-
-    for k in indxtime:
-        indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
-        fluxavgd[k] = np.mean(flux[indx])
-
-    # print('\nfluxavgd after: \n', fluxavgd)
-    
-    # print(fluxavgd)
-    return fluxavgd
-"""
-# -----------------------------------------------------------------------------------
-
-#lcurobjt = lightkurve.lightcurve.LightCurve(flux=gdat.lcurdata[k], time=gdat.time[k], flux_err=flux_err, time_format='jd', time_scale='utc')
-#lcurobjt.flatten()
-#lcurobjt.fold(peri)
-#lcurobjt.bin(numbtimebins)
-
 # get the saved data
 def gen_mockdata(datatype):
     
@@ -357,6 +333,23 @@ def gen_mockdata(datatype):
         pathname += '_ete6.npz'
         np.savez(pathname, time, inptraww, outp, tici, peri)
     
+    if datatype == 'tess': 
+        # read period from tess_tce_sector1_2.csv 
+        #outp, peri =  
+        #columns of this file are 
+ 
+        # TIC ID, TOI ID, disposition aka label,  
+        # read inptraww from the file 
+        inptraww, outp, peri =  
+        path = 'tess2018234235059-s0002-0000000012421161-0121-s_lc.fits' 
+ 
+        objt = lightkurve.lightcurvefile.TessLightCurveFile(path) 
+        objt.flatten().flux 
+ 
+        pathname += '_tess.npz' 
+        np.savez(pathname, inptraww, outp, peri) 
+ 
+
     return pathname
 
 # bin and save
@@ -382,20 +375,14 @@ def gen_binned(path_namer, datatype):
     pbar = ProgressBar(widgets=widgets, maxval=len(indxdata))
     pbar.start()
 
-    # cntr = 0
     for k in indxdata:
-        # temp, dunno if this is right idea for peri [only uses first peri]
-        # numbperi = peri[cntr].size
-        # indxperi = np.arange(numbperi)
 
         tester = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc')
-
-        # print(len(inptloclfold[k,:]), len(tester.flux))
         
-        # only fold the planets by peri[k]
         if k < numbplan:
             peritemp = int(peri[k])
         else:
+            # temp val...
             peritemp = 10
 
         inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(peritemp).bin(100).flux # BIN hard coded (fix soon)
@@ -430,7 +417,8 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(10).flux)
+            temp = tester.flatten().fold(peritemp).bin(10) 
+            ax.plot(temp.time, temp.flux) 
             ax.set_title('Globally Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
@@ -439,7 +427,8 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(100).flux)
+            temp = tester.flatten().fold(peritemp).bin(100) 
+            ax.plot(temp.time, temp.flux) 
             ax.set_title('Locally Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
@@ -468,7 +457,6 @@ def inpt_before_train(locl, glob, outp, saveinpt=True):
     inptG = np.loadtxt(glob)
     outp  = np.loadtxt(outp)
  
-     
 
     # gives just 10 plots
     indexer = int(len(indxdata)/10)
@@ -530,7 +518,6 @@ def gen_fitted_model(inptL, inptG, outp, model):
 
     modl = model()
 
-    #got rid of: for y in indxepoc:
     inptfitL = inptL[:, :, None]
     inptfitG = inptG[:, :, None]
     
@@ -601,8 +588,6 @@ def gen_metr(inptL, inptG, outp, fitmodel):
 
             for threshold in range(len(thresh)):
 
-                precise, recalling = True, True
-
                 outppred = (fitmodel.predict([inptL, inptG]) > thresh[threshold]).astype(int)
 
                 matrconf = confusion_matrix(outp, outppred)
@@ -616,8 +601,7 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                 flpo = matrconf[0,1]
                 flne = matrconf[1,0]
                 trpo = matrconf[1,1]
-                
-
+            
 
                 if float(trpo + flpo) > 0:
                     metr[epoc, threshold, i, 0] = trpo / float(trpo + flpo) # precision
@@ -630,29 +614,7 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                     metr[epoc, threshold, i, 2] = trpo / float(trpo + flne) # recall
                 else:
                     recalling = False
-                """
-                if not precise and not recalling:
-                    pass
-                    print('inptL')
-                    summgene(inptL)
-                    print('inptG')
-                    summgene(inptG) 
-                    print('outppred')
-                    summgene(outppred)
-                    print('confusion matrix\n', matrconf)
-                
-                else:
-                    statement = 'viable'
-                    
 
-                if precise and recalling:
-                    statement += ' and great!'
-
-                try: 
-                    print(statement)
-                finally:
-                    pass
-                """
             pbar.finish()
     
     np.save(pathsavemetr, metr)
