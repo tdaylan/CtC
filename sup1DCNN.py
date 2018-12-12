@@ -23,8 +23,64 @@ import lightkurve
 from exop import main as exopmain
 
 
-widgets = ['Test: ', Percentage(), ' ', Bar(marker='0',left='[',right=']'),
+widgets = ['Working hard! : ', Percentage(), ' ', Bar(marker='#',left='[',right=']'),
            ' ', ETA(), ' ', FileTransferSpeed()]
+
+""" 
+color convention:
+
+true pos: blue
+true neg: green
+fals pos: red
+fals neg: orange
+
+write disposition (as a text box to the top of the graph) [for the 2x2 trflnegpos graphs]
+write relevant vs irrelevant for the input curves
+
+write tmag and rp and period and transit depth and src in a text box
+
+SRC********* need to keep the two seperate
+
+
+FLATTEN*****
+    need to mask the transit before flattening
+    this requires knowing where the transit is!
+    look for examples in lightkurve
+
+    Tansu's impression:
+        want get the period (read from one of the columns of the csv)
+        use that period to mask the transit
+        HOW TO DO THAT: 
+            no immediate answer on lightkurve...
+
+
+            try this instead of flattening:
+
+
+            detrending with masking
+            to do the detrending itself
+            scipt.inerpolate.LSQUnivariateSpline(x,y,t)
+                x: time
+                y: relative flux
+                t: linspace(min(x), max(x) [excluding these values], of length 10-15)
+
+                returns fit to these points
+
+            subtract lightcurve - LSQFit
+
+            ** or **
+
+            to get the mask, without the phase information:
+
+                replace the 'transit location' in the mask with NaNs so we can subtract this
+
+
+using datavalidation objects, so we cannot just read the lightcurve file in lightkurve
+
+so we just send the flux and time and pass them to the lightkurve arguments as we did before 
+
+    hdun[0] = 
+"""
 
 
 
@@ -38,10 +94,7 @@ fractest = 0.3
 numbepoc = 1
 indxepoc = np.arange(numbepoc)
 
-numbruns = 100
-
 indxepoc = np.arange(numbepoc)
-indxruns = np.arange(numbruns)
 
 
 # mockdata param
@@ -86,7 +139,6 @@ localbinsindx = np.arange(localtimebins)
 globalbinsindx = np.arange(globaltimebins)
 
 
-# pathdata = os.environ['CTHC_DATA_PATH'] + '/'
 
 # names for folded .dat files
 pathsavefoldLocl = 'savefold_%s_%s_%04dbins' % (datatype, 'locl', localtimebins) + path_namer_str +  '.dat'
@@ -250,6 +302,41 @@ def reduced():
 modl = reduced
 
 modlpath = 'reduced_' + path_namer_str + '.h5'
+# -----------------------------------------------------------------------------------
+
+# binning TOO SLOW
+"""
+def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
+    
+    timefold = ((time - epoc) / peri + 0.25) % 1.
+    
+    if zoomtype == 'glob':
+        minmtimefold = 0.
+        maxmtimefold = 1.
+    else:
+        minmtimefold = 0.15
+        maxmtimefold = 0.35
+    binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
+    indxtime = np.arange(numbtime)
+    fluxavgd = np.empty(numbtime)
+
+    # print('\nfluxavgd before: \n', fluxavgd)
+
+    for k in indxtime:
+        indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
+        fluxavgd[k] = np.mean(flux[indx])
+
+    # print('\nfluxavgd after: \n', fluxavgd)
+    
+    # print(fluxavgd)
+    return fluxavgd
+"""
+# -----------------------------------------------------------------------------------
+
+#lcurobjt = lightkurve.lightcurve.LightCurve(flux=gdat.lcurdata[k], time=gdat.time[k], flux_err=flux_err, time_format='jd', time_scale='utc')
+#lcurobjt.flatten()
+#lcurobjt.fold(peri)
+#lcurobjt.bin(numbtimebins)
 
 # get the saved data
 def gen_mockdata(datatype):
@@ -259,22 +346,6 @@ def gen_mockdata(datatype):
     if datatype == 'here':
         inptraww, outp, peri = exopmain.retr_datamock(numbplan=numbplan,\
                 numbnois=numbnois, numbtime=numbtime, dept=dept, nois=nois)
-
-        pathname += '_here.npz'
-        np.savez(pathname, inptraww, outp, peri)
-
-    if datatype == 'tess':
-        # read period from tess_tce_sector1_2.csv
-        #outp, peri = 
-        #columns of this file are
-
-        # TIC ID, TOI ID, disposition aka label, 
-        # read inptraww from the file
-        inptraww, outp, peri = 
-        path = 'tess2018234235059-s0002-0000000012421161-0121-s_lc.fits'
-
-        objt = lightkurve.lightcurvefile.TessLightCurveFile(path)
-        objt.flatten().flux
 
         pathname += '_here.npz'
         np.savez(pathname, inptraww, outp, peri)
@@ -359,8 +430,7 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            temp = tester.flatten().fold(peritemp).bin(10)
-            ax.plot(temp.time, temp.flux)
+            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(10).flux)
             ax.set_title('Globally Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
@@ -369,8 +439,7 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            temp = tester.flatten().fold(peritemp).bin(100)
-            ax.plot(temp.time, temp.flux)
+            ax.plot(tester.time, tester.flatten().fold(peritemp).bin(100).flux)
             ax.set_title('Locally Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
@@ -501,7 +570,7 @@ def gen_metr(inptL, inptG, outp, fitmodel):
     outptest = outp[:numbdatatest]
     outptran = outp[numbdatatest:]
 
-    print("Generating Metric Matrix")
+    print("\nGenerating Metric Matrix")
 
     for epoc in indxepoc:
         
@@ -715,10 +784,10 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
     outptran = outp[numbdatatest:]
 
     print("Graphing inpt based on conf_matr")
-    pbar = ProgressBar(widgets=widgets, maxval=numbruns)
+    pbar = ProgressBar(widgets=widgets, maxval=numbepoc)
     pbar.start()  
 
-    for run in range(numbruns):
+    for epoch in indxepoc:
         
         # for threshold in thresh:
         
@@ -730,17 +799,19 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
                 inptL = inpttranL
                 inptG = inpttranG
                 outp = outptran
-                col = 'r'
+                shape = 'o'
                 
             else:
                 inptL = inpttestL
                 inptG = inpttestG
                 outp = outptest
-                col = 'b'
+                shape = '--'
                 
             inptL = inptL[:,:,None]
             inptG = inptG[:,:,None]
             
+            # HOW TO: RUN MORE TRAINING ON AN ALREADY GENERATED MODEL? PUT HERE WHEN SOLVED :)
+
             outppred = (fitmodel.predict([inptL, inptG]) > 0.7).astype(int)
             
             matrconf = confusion_matrix(outp, outppred)
@@ -757,30 +828,30 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
             trpo = matrconf[1,1]
 
 
+            
+            axis[0,0].plot(epoch, trne, marker=shape, ls='', markersize=3, alpha=0.1, color='g')
+            axis[0,1].plot(epoch, flpo, marker=shape, ls='', markersize=3, alpha=0.1, color='r')
+            axis[1,0].plot(epoch, flne, marker=shape, ls='', markersize=3, alpha=0.1, color='#FFA500') # this is the color orange
+            axis[1,1].plot(epoch, trpo, marker=shape, ls='', markersize=3, alpha=0.1, color='b')
 
-            axis[0,0].plot(run, trne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
-            axis[0,1].plot(run, flpo, marker='o', ls='', markersize=3, alpha=0.1, color=col)
-            axis[1,0].plot(run, flne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
-            axis[1,1].plot(run, trne, marker='o', ls='', markersize=3, alpha=0.1, color=col)
-
-        pbar.update(run)
+        pbar.update(epoch)
     pbar.finish()
   
     axis[0,0].set_title('True Negative')
-    axis[0,0].set_xlabel('Run #')
-    axis[0,0].set_ylabel('Relative Flux')
+    axis[0,0].set_xlabel('Epoch')
+    axis[0,0].set_ylabel('True Negative')
 
     axis[0,1].set_title('False Positive')
-    axis[0,1].set_xlabel('Run #')
-    axis[0,1].set_ylabel('Relative Flux')
+    axis[0,1].set_xlabel('Epoch')
+    axis[0,1].set_ylabel('False Positive')
 
     axis[1,0].set_title('False Negative')
-    axis[1,0].set_xlabel('Run #')
-    axis[1,0].set_ylabel('Relative Flux')
+    axis[1,0].set_xlabel('Epoch')
+    axis[1,0].set_ylabel('False Negative')
 
     axis[1,1].set_title('True Positive')
-    axis[1,1].set_xlabel('Run #')
-    axis[1,1].set_ylabel('Relative Flux')
+    axis[1,1].set_xlabel('Epoch')
+    axis[1,1].set_ylabel('True Positive')
 
     plt.tight_layout()
 
@@ -809,7 +880,7 @@ if not os.path.exists(modlpath):
 if not os.path.exists(pathsavemetr):
     gen_metr(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath)
 
-graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr, saveinpt=False)
+graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
 
 
 
