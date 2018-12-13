@@ -26,7 +26,7 @@ import lightkurve
 from exop import main as exopmain
 
 
-widgets = ['Working hard! : ', Percentage(), ' ', Bar(marker='#',left='[',right=']'),
+widgets = ['Working! ', Percentage(), ' ', Bar(marker='#',left='[',right=']'),
            ' ', ETA(), ' ', FileTransferSpeed()]
 
 """ 
@@ -103,7 +103,7 @@ path =
 # training param
 fractest = 0.3
 
-numbepoc = 1
+numbepoc = 20
 indxepoc = np.arange(numbepoc)
 
 indxepoc = np.arange(numbepoc)
@@ -114,10 +114,12 @@ datatype = 'here'
 
 numbtime = 20000 # could maybe need to be 2001 to meet paper's specs
 
+# find bin numb to get both 2001 and 201 with (we don't care about) remainders!
+
 dept = 0.998
 nois = 3e-3
-numbdata = int(1e4)
-fracplan = 0.2
+numbdata = int(2e4)
+fracplan = 0.35
 
 numbplan = int(numbdata * fracplan)
 numbnois = numbdata - numbplan
@@ -125,6 +127,9 @@ numbnois = numbdata - numbplan
 indxtime = np.arange(numbtime)
 indxdata = np.arange(numbdata)
 
+numbdatatest = int(fractest * numbdata)
+
+# ONLY FOR MOCK DATA, SHOULD RENAME THINGS FOR OTHER [TESS] INPUTS
 path_namer_dict = {'numbtime': numbtime, 'dept' : dept, 'nois' : nois, 'numbdata' : numbdata, 'fracplan':fracplan}
 path_namer_str = ""
 for key, value in path_namer_dict.items():
@@ -141,6 +146,9 @@ thresh = [0.4 + i/(points_thresh*3) for i in range(points_thresh)]
 # binning data
 paperloclinpt = 200      # input shape from paper [local val]
 papergloblinpt = 2000   # input shape from paper
+
+loclbin = int(numbtime/paperloclinpt)
+globbin = int(numbtime/papergloblinpt)
 
 localtimebins = paperloclinpt
 globaltimebins = papergloblinpt
@@ -159,12 +167,13 @@ pathsavefoldoutp = 'savefold_%s_%s' % (datatype, 'outp') + path_namer_str + '.da
 inptb4path = 'inpt_'+path_namer_str+'.pdf'
 
 pathsavemetr = 'metr_' + path_namer_str + '.npy'
+pathsaveconf = 'conf_' + path_namer_str + '.npy'
 # -----------------------------------------------------------------------------------
 
 # CONVOLUTIONAL MODELS
 
 # models from "Scientific Domain Knowledge Improves Exoplanet Transit Classification with Deep Learning"
-# astronet
+# aka astronet
 def exonet():
     loclinpt, globlinpt = 200, 2000 # hard coded for now
     padX = 'same'
@@ -243,7 +252,6 @@ def exonet():
     # modlfinl.summary()
     return modlfinl
 
-# 
 def reduced():
     loclinpt, globlinpt = 200, 2000 # hard coded for now
     padX = 'same'
@@ -256,7 +264,6 @@ def reduced():
     x = MaxPooling1D(pool_size=2, strides=2, padding=padX)(x)
 
     x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu')(x)
-
 
     x = GlobalMaxPool1D()(x)
 
@@ -307,16 +314,29 @@ def reduced():
 
     return modlfinl
 
+
 # these need to have the same name but path has ()
 # path = reduced()
 modl = reduced
 
-modlpath = 'reduced_' + path_namer_str + '.h5'
+modlpath = '{}_'.format(str(modl.__name__)) + path_namer_str + '.h5'
 # -----------------------------------------------------------------------------------
 
 # get the saved data
 def gen_mockdata(datatype):
+    """
+    Pretty straightforward: datatype is a string
     
+    Ex:
+    'here' : mockdata generated in exopmain;
+    'ete6' : data from ete6 (still pulled from exopmain);
+    'tess' : data from TESS (pulled from exopmain);
+
+    Saves the input data as a .npz file
+    
+    Returns the final pathname (so if needed you can print, or assign to variable)
+    """
+
     pathname = path_namer_str
 
     if datatype == 'here':
@@ -333,28 +353,35 @@ def gen_mockdata(datatype):
         pathname += '_ete6.npz'
         np.savez(pathname, time, inptraww, outp, tici, peri)
     
-    if datatype == 'tess': 
-        # read period from tess_tce_sector1_2.csv 
-        #outp, peri =  
-        #columns of this file are 
- 
-        # TIC ID, TOI ID, disposition aka label,  
-        # read inptraww from the file 
-        inptraww, outp, peri =  
-        path = 'tess2018234235059-s0002-0000000012421161-0121-s_lc.fits' 
- 
-        objt = lightkurve.lightcurvefile.TessLightCurveFile(path) 
-        objt.flatten().flux 
- 
-        pathname += '_tess.npz' 
-        np.savez(pathname, inptraww, outp, peri) 
- 
-
     return pathname
 
 # bin and save
 def gen_binned(path_namer, datatype):
+    """
+    Takes the input data (as the .npz file from gen_mockdata) and bins the data
     
+
+    Uses lightkurve to flatten, fold, and bin the data
+
+
+    [Not modular YET] Currently will make 10 sets of graphs of each input space, with each set containing the raw lightcurve,
+    the flattened, the folded, and finally the binned curves. 
+
+
+    Current state:  
+
+    removed flattening as it caused the transits to display a weird 'before and after upwards peak'
+
+    binning is hard coded above to ensure size is correct for the models being trained
+
+
+    Returns None
+
+    Saves local, global, and output to three separate .dat files 
+    """
+
+
+    # load data based on type
     if datatype == 'here':
         loaded = np.load(path_namer+'_'+datatype+'.npz')
 
@@ -367,28 +394,36 @@ def gen_binned(path_namer, datatype):
 
         time, inptraww, outp, tici, peri = loaded['arr_0'], loaded['arr_1'], loaded['arr_2'], loaded['arr_3'], loaded['arr_4']
 
+    # holder np arrays
     inptloclfold = np.empty((numbdata,localtimebins))
     inptglobfold = np.empty((numbdata, globaltimebins))
 
-    print("Generating binned")
+    # let our runner know what is happening :)
+    print("\nGenerating binned")
 
+    # further let the runner know what is happening, by running a progress bar :))
     pbar = ProgressBar(widgets=widgets, maxval=len(indxdata))
     pbar.start()
 
+    # for each curve in the inpt space
     for k in indxdata:
 
-        tester = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc')
-        
+        # for datatype 'here' the period of the planets are found in the indeces k < numbplan (the planets are the first numbplan# of light curves)
         if k < numbplan:
             peritemp = int(peri[k])
         else:
-            # temp val...
             peritemp = 10
 
-        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(peritemp).bin(100).flux # BIN hard coded (fix soon)
-        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').flatten().fold(peritemp).bin(10).flux # BIN hard coded
+        # temp! removed flatten before fold
+        inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').fold(peritemp).bin(loclbin).flux # BIN hard coded (fix soon)
+        inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc').fold(peritemp).bin(globbin).flux # BIN hard coded
         
+        # [HARD CODED, MAKE MODULAR] graphs showing transformations on input space
         if k < 10:
+
+            # a lightkurve object purely for graphing purposes
+            tester = lightkurve.lightcurve.LightCurve(time=indxtime, flux=inptraww[k,:], time_format='jd', time_scale='utc')
+
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
             ax.plot(tester.time, tester.flux)
             ax.set_title('untouched')
@@ -398,6 +433,7 @@ def gen_binned(path_namer, datatype):
             plt.savefig('untouched{}'.format(k) + inptb4path)
             plt.close()
 
+            """
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
             ax.plot(tester.time, tester.flatten().flux)
             ax.set_title('Flattened')
@@ -406,9 +442,10 @@ def gen_binned(path_namer, datatype):
             plt.tight_layout()
             plt.savefig('flattened{}'.format(k) + inptb4path)
             plt.close()            
-            
+            """
+
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            ax.plot(tester.time, tester.flatten().fold(peritemp).flux)
+            ax.plot(tester.time, tester.fold(peritemp).flux)
             ax.set_title('Folded')
             ax.set_xlabel('Time')
             ax.set_ylabel('Flux')
@@ -417,7 +454,7 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            temp = tester.flatten().fold(peritemp).bin(10) 
+            temp = tester.fold(peritemp).bin(globbin) 
             ax.plot(temp.time, temp.flux) 
             ax.set_title('Globally Folded')
             ax.set_xlabel('Time')
@@ -427,7 +464,7 @@ def gen_binned(path_namer, datatype):
             plt.close()
 
             fig, ax = plt.subplots(constrained_layout=True, figsize=(12,6))
-            temp = tester.flatten().fold(peritemp).bin(100) 
+            temp = tester.fold(peritemp).bin(loclbin) 
             ax.plot(temp.time, temp.flux) 
             ax.set_title('Locally Folded')
             ax.set_xlabel('Time')
@@ -440,46 +477,66 @@ def gen_binned(path_namer, datatype):
 
     pbar.finish()
 
+    # save the data generated
     np.savetxt(pathsavefoldLocl, inptloclfold)
     np.savetxt(pathsavefoldGlob, inptglobfold)
     np.savetxt(pathsavefoldoutp, outp)
 
+    # let the user know we are done here :)
     print('Writing local folded to %s...' % pathsavefoldLocl)
     print('Writing global folded to %s...' % pathsavefoldGlob)
     print('Writing output to %s...' % pathsavefoldoutp)
 
     return None
 
-
+# graphs inputs, and transformed inputs
 def inpt_before_train(locl, glob, outp, saveinpt=True):
-    
+    """
+    Takes the binned data from gen_binned and makes input graphs
+
+    Currently hard-coded to make exactly 10
+
+    Shows both the local and global view
+    """
+
+    # load the files
     inptL = np.loadtxt(locl)
     inptG = np.loadtxt(glob)
     outp  = np.loadtxt(outp)
  
-
     # gives just 10 plots
     indexer = int(len(indxdata)/10)
     indexes = indxdata[0::indexer]
 
-    print("Making input graphs!")
+    # let the user know what is happening :)
+    print("\nMaking input graphs!")
 
+    # let the user know with a progressbar :)
     pbar = ProgressBar(widgets=widgets, maxval=len(indexes))
-    pbar.start()   
+    pbar.start()  
+
+    # for the progressbar
     pbarcounter = 0
+
+    # for just the 10 specified plots:
     for k in indexes:
+
+        # red is relevant (has an output that signifies a planet is present)
         if outp[k] == 1:
             colr = 'r'
+        # blue is irrelevant
         else:
             colr = 'b'
         
+        # line for local, line for global [line is used liberally, just a collection of x and y points]
+        # k indexes in for a SINGLE light curve
         localline = (localbinsindx, inptL[k, :])
         globalline = (globalbinsindx, inptG[k, :])
 
-        
+        # make the 2 subplots
         fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6))
 
-
+        # plot 1 is the local plot, plot 2 is the global
         axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
         axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
         
@@ -498,17 +555,26 @@ def inpt_before_train(locl, glob, outp, saveinpt=True):
         if saveinpt:
             plt.savefig('{}_'.format(k) + inptb4path)
             
-        
         else:
             plt.show()
         
         pbar.update(pbarcounter)
         pbarcounter += 1
+
     pbar.finish()
+
     return None    
-    
+
+# single-epoch-trained model    
 def gen_fitted_model(inptL, inptG, outp, model):
-    
+    """
+    Initializes a single-epoch-trained model just to be called at later points
+
+    Arguably, this might be entirely useless function that takes up more space than it is worth,
+    depends on how much having a saved, barely trained function is worth
+    """
+
+    # inputs should be strings of the filenames of the data
     if isinstance(inptL, str):
         inptL = np.loadtxt(inptL)
     if isinstance(inptG, str):
@@ -516,38 +582,70 @@ def gen_fitted_model(inptL, inptG, outp, model):
     if isinstance(outp, str):
         outp  = np.loadtxt(outp)
 
+    # initialize model
     modl = model()
 
+    # this is TRAINING so we only use the training data
+    inptL = inptL[numbdatatest:, :]
+    inptG = inptG[numbdatatest:, :]
+    outp = outp[numbdatatest:]
+
+    # make the size of the inputs fit the model
     inptfitL = inptL[:, :, None]
     inptfitG = inptG[:, :, None]
     
-    hist = modl.fit([inptfitL, inptfitG], outp, epochs=numbepoc, validation_split=fractest, verbose=2)
+    # fit the model for the first epoch (this is largely to just have a baseline model to keep training later)
+    hist = modl.fit([inptfitL, inptfitG], outp, epochs=1, validation_split=fractest, verbose=2)
 
+    # save for later use
     modl.save(modlpath)
 
-
+    # optional, shows how well fit
     print(hist.history)
 
     return None
 
-# NEEDS TO BE RERUN WITH PROPER THRESH VALS
+# THIS IS THE VALUABLE MATRIX DATA in matrix metr and conf_matr_vals
 def gen_metr(inptL, inptG, outp, fitmodel):
+    """
+    This is the BOTTLENECK of this pipeline
 
+    metr: prec, acc, recal; per epoch and threshold
+    conf_matr_vals: trne, trpo, flne, flpo; per epoch and threshold
+
+    the time is largely reliant on how many epochs are in indxepoc, and the size(or length) of the input data
+    input data needs to be high enough to not overtrain over a small set, but not so big that the training never ends
+
+    IDEALLY: there would be intermittent saving or updating, and the ability to start back up from where left off to
+    use any of the data before it is completely finished
+    """
+
+    # inputs should be strings, loads inputs from files
     if isinstance(inptL, str):
         inptL = np.loadtxt(inptL)
     if isinstance(inptG, str):
         inptG = np.loadtxt(inptG)
     if isinstance(outp, str):
         outp  = np.loadtxt(outp)
-
     if isinstance(fitmodel, str):
-        # in case the fitmodel is being taken as the output from gen_fitted_model
         fitmodel = load_model(fitmodel)
 
-    metr = np.zeros((numbepoc, len(thresh), 2, 3)) - 1
 
-    numbdatatest = int(fractest * numbdata)
+    # initialize the matrix holding all metric values
+    # INDEX 1: which epoch
+    # INDEX 2: which threshold value is being tested against
+    # INDEX 3: [IN THIS ORDER] precision, accuracy, recall (numerical values)
+    metr = np.zeros((numbepoc, len(thresh), 3)) - 1
 
+
+    # we also want the confusion matrices for later use
+    # INDEX 1: which epoch
+    # INDEX 2: which threshold value is being tested against
+    # INDEX 3: [IN THIS ORDER] trne, flpo, flne, trpo
+    conf_matr_vals = np.zeros((numbepoc, len(thresh), 4))
+
+
+    # separate the training from the testing
     inpttestL = inptL[:numbdatatest, :]
     inpttranL = inptL[numbdatatest:, :]
 
@@ -557,11 +655,13 @@ def gen_metr(inptL, inptG, outp, fitmodel):
     outptest = outp[:numbdatatest]
     outptran = outp[numbdatatest:]
 
+    # let our friends running this know what is happening
     print("\nGenerating Metric Matrix")
 
+    # run through epochs
     for epoc in indxepoc:
         
-
+        # train and then test (we shouldn't run the metric return on the training data)
         for i in range(2):
             # i == 0 -> train
             # i == 1 -> test
@@ -570,67 +670,68 @@ def gen_metr(inptL, inptG, outp, fitmodel):
                 inptL = inpttranL
                 inptG = inpttranG
                 outp = outptran
-                inptcol = 'train' 
+                
+                inptL = inptL[:, :, None]
+                inptG = inptG[:, :, None]
 
+                # we loaded in an already once trained model, so to keep with our notation, we should exclude epoc 1
+                if epoc > 1:
+                    hist = fitmodel.fit([inptL, inptG], outp, epochs=1, validation_split=fractest, verbose=2)
+                else:
+                    pass
+                
             else:
                 inptL = inpttestL
                 inptG = inpttestG
                 outp = outptest
-                inptcol = 'test' 
+                
+                inptL = inptL[:, :, None]
+                inptG = inptG[:, :, None]
 
-            inptL = inptL[:, :, None]
-            inptG = inptG[:, :, None]
-            
-            print("Epoch {0}, ".format(epoc) + inptcol)
+                # only now, within the testing parameters, we test against a range of threshold values
+                for threshold in range(len(thresh)):
 
-            pbar = ProgressBar(widgets=widgets, maxval=len(thresh))
-            pbar.start()
+                    outppred = (fitmodel.predict([inptL, inptG]) > thresh[threshold]).astype(int)
 
-            for threshold in range(len(thresh)):
+                    matrconf = confusion_matrix(outp, outppred)
 
-                outppred = (fitmodel.predict([inptL, inptG]) > thresh[threshold]).astype(int)
+                    if matrconf.size == 1:
+                        matrconftemp = np.copy(matrconf)
+                        matrconf = np.empty((2,2))
+                        matrconf[0,0] = matrconftemp
 
-                matrconf = confusion_matrix(outp, outppred)
+                    trne = matrconf[0,0]
+                    flpo = matrconf[0,1]
+                    flne = matrconf[1,0]
+                    trpo = matrconf[1,1]
+                    
+                    # update conf matrix holder
+                    conf_matr_vals[epoc, threshold, 0] = trne
+                    conf_matr_vals[epoc, threshold, 1] = flpo
+                    conf_matr_vals[epoc, threshold, 2] = flne
+                    conf_matr_vals[epoc, threshold, 3] = trpo
 
-                if matrconf.size == 1:
-                    matrconftemp = np.copy(matrconf)
-                    matrconf = np.empty((2,2))
-                    matrconf[0,0] = matrconftemp
 
-                trne = matrconf[0,0]
-                flpo = matrconf[0,1]
-                flne = matrconf[1,0]
-                trpo = matrconf[1,1]
-            
+                    # update metr with only viable data (test for positive values)
+                    if float(trpo + flpo) > 0:
+                        metr[epoc, threshold, 0] = trpo / float(trpo + flpo) # precision
+                    else:
+                        pass
 
-                if float(trpo + flpo) > 0:
-                    metr[epoc, threshold, i, 0] = trpo / float(trpo + flpo) # precision
-                else:
-                    precise = False
+                    metr[epoc, threshold, 1] = float(trpo + trne)/(trpo + flpo + trne) # accuracy
 
-                metr[epoc, threshold, i, 1] = float(trpo + trne)/(trpo + flpo + trne) # accuracy
+                    if float(trpo + flne) > 0:
+                        metr[epoc, threshold, 2] = trpo / float(trpo + flne) # recall
+                    else:
+                        pass
 
-                if float(trpo + flne) > 0:
-                    metr[epoc, threshold, i, 2] = trpo / float(trpo + flne) # recall
-                else:
-                    recalling = False
-
-            pbar.finish()
-    
+    fitmodel.save('trained_' + modlpath)
     np.save(pathsavemetr, metr)
+    np.save(pathsaveconf, conf_matr_vals)
     
     return None
 
-def summgene(varb):
-    '''
-    convenience function to quickly print a numpy array
-    '''
-    
-    print ('min', np.amin(varb))
-    print ('max', np.amax(varb))
-    print ('mean', np.mean(varb))
-    print ('shape', varb.shape)
-
+# graphs prec vs recal 
 def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
     
     if isinstance(inptL, str):
@@ -663,13 +764,14 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
         r'$\mathrm{Signal:Noise}=%.2f$' % (dept/nois, ),
         # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
         r'$\mathrm{AUC}=%.8f$' % (auc, ),
-        r'$\mathrm{Depth}=%.2f$' % (dept, )))
+        r'$\mathrm{Depth}=%.4f$' % (dept, )))
     
 
 
     x_points = []
     y_points = []
 
+    fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
 
     for epoc in indxepoc:
         for i in range(2):
@@ -693,13 +795,14 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
                 if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
                     x_points.append(x) # recall
                     y_points.append(y) # precision
+                    axis.plot(x, y, marker='o', ls='', markersize=3, alpha=0.6)
 
                 pbar.update(threshold)
             pbar.finish()
 
 
-    fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
-    axis.plot(x_points, y_points, marker='o', ls='', markersize=3, alpha=0.6)
+    
+    
     axis.axhline(1, alpha=.4)
     axis.axvline(1, alpha=.4)
     props = dict(boxstyle='round', alpha=0.4)
@@ -715,8 +818,9 @@ def graph_PvR(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
     else:
         plt.show()
 
-
-def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
+# graphs conf matrix per epoch
+# remake to just take conf_matr_vals
+def graph_conf(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 
     if isinstance(inptL, str):
         inptL = np.loadtxt(inptL)
@@ -734,7 +838,7 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 
     fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
 
-    numbdatatest = int(fractest * numbdata)
+    
 
     inpttestL = inptL[:numbdatatest, :]
     inpttranL = inptL[numbdatatest:, :]
@@ -745,17 +849,16 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
     outptest = outp[:numbdatatest]
     outptran = outp[numbdatatest:]
 
-    print("Graphing inpt based on conf_matr")
-    pbar = ProgressBar(widgets=widgets, maxval=numbepoc)
-    pbar.start()  
+    print("Graphing inpt based on conf_matr") 
 
-    for epoch in indxepoc:
-        
-        # for threshold in thresh:
-        
-        for i in range(2):
-            # i == 0 : train
-            # i == 1 : test
+    for i in range(2):
+        # i == 0 : train
+        # i == 1 : test
+
+        for epoch in range(10):
+            
+            print("\nEpoch ", epoch)
+
             
             if i == 0:
                 inptL = inpttranL
@@ -767,13 +870,14 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
                 inptL = inpttestL
                 inptG = inpttestG
                 outp = outptest
-                shape = '--'
+                shape = 'v'
                 
             inptL = inptL[:,:,None]
             inptG = inptG[:,:,None]
             
-            # HOW TO: RUN MORE TRAINING ON AN ALREADY GENERATED MODEL? PUT HERE WHEN SOLVED :)
 
+            hist = fitmodel.fit([inptL, inptG], outp, epochs=1, validation_split=fractest, verbose=1)
+            
             outppred = (fitmodel.predict([inptL, inptG]) > 0.7).astype(int)
             
             matrconf = confusion_matrix(outp, outppred)
@@ -791,13 +895,11 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 
 
             
-            axis[0,0].plot(epoch, trne, marker=shape, ls='', markersize=3, alpha=0.1, color='g')
-            axis[0,1].plot(epoch, flpo, marker=shape, ls='', markersize=3, alpha=0.1, color='r')
-            axis[1,0].plot(epoch, flne, marker=shape, ls='', markersize=3, alpha=0.1, color='#FFA500') # this is the color orange
-            axis[1,1].plot(epoch, trpo, marker=shape, ls='', markersize=3, alpha=0.1, color='b')
+            axis[0,0].plot(epoch, trne, marker=shape, ls='', markersize=3, alpha=0.3, color='g')
+            axis[0,1].plot(epoch, flpo, marker=shape, ls='', markersize=3, alpha=0.3, color='r')
+            axis[1,0].plot(epoch, flne, marker=shape, ls='', markersize=3, alpha=0.3, color='#FFA500') # this is the color orange
+            axis[1,1].plot(epoch, trpo, marker=shape, ls='', markersize=3, alpha=0.3, color='b')
 
-        pbar.update(epoch)
-    pbar.finish()
   
     axis[0,0].set_title('True Negative')
     axis[0,0].set_xlabel('Epoch')
@@ -829,7 +931,7 @@ def graph_inpt_space(inptL, inptG, outp, fitmodel, metr, saveinpt=True):
 # --------------------------------------------------------------------------------
 
 # script
-mockdata = gen_mockdata(datatype)
+# mockdata = gen_mockdata(datatype)
 
 if not os.path.exists(pathsavefoldLocl):
     gen_binned(path_namer_str, datatype)
@@ -842,8 +944,9 @@ if not os.path.exists(modlpath):
 if not os.path.exists(pathsavemetr):
     gen_metr(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath)
 
-graph_inpt_space(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
+graph_conf(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
 
+graph_PvR(pathsavefoldLocl, pathsavefoldGlob, pathsavefoldoutp, modlpath, pathsavemetr)
 
 
 
