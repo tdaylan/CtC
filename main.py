@@ -17,282 +17,144 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(context='poster', style='ticks', color_codes=True)
-#import exop
-#from exop import main as exopmain
 
-class bind():
-   
-
-    def __init__(self, data, period):
-        """ 
-        Allows raw data to be passed in, folded over itself, and binned
-        """
-        self.data = data
-        self.period = period
-
-
-    def scop(self, binnstep=1, kind='locl', period=10):
-        """
-        scop = Bin within a certain Scope
-
-        Inputs:
-        binnstep := how wide you want the bins to be
-        kind := locl or globl (local or global) -> large or small scope
-        period := if local, this is the local period
-
-        Outputs:
-        binned list as a np.array
-        """
-
-        # test kind
-        if kind == 'globl':
-            divisor = 1
-        elif kind == 'locl':
-            divisor = int(len(self.data)/period)
-        else:
-            # don't cause a break if kind is wrong, just correct and notify
-            print('This kind is not recognized, using local magnification')
-            self.scop()
-        
-        # call folded to get the right scope
-        folded = self.fold(divisor)
-
-        # bounds of the binning
-        lowr = 0
-        high = len(folded)
-
-        # bin the data
-        temp = self.binn(lowr, high, binnstep)
-
-        # holder
-        final = []
-
-        # iterate through each bin to average the values in the bin
-        for rang in temp:
-            summer = 0
-            for i in range(rang[0],rang[1]):
-                summer += self.data[i]
-            final.append(summer/(rang[1]-rang[0]))
-        
-        return np.asarray(final)
-
-
-
-def binn_lcur(numbtime, time, flux, peri, epoc, zoomtype='glob'):
-    
-    timefold = ((time - epoc) / peri + 0.25) % 1.
-    
-    if zoomtype == 'glob':
-        minmtimefold = 0.
-        maxmtimefold = 1.
-    else:
-        minmtimefold = 0.15
-        maxmtimefold = 0.35
-    binstimefold = np.linspace(minmtimefold, maxmtimefold, numbtime + 1)
-    indxtime = np.arange(numbtime)
-    fluxavgd = np.empty(numbtime)
-    for k in indxtime:
-        indx = np.where((binstimefold[k] < timefold) & (timefold < binstimefold[k+1]))[0]
-        fluxavgd[k] = np.mean(flux[indx])
-
-    return fluxavgd
+import exop
+from exop import main as exopmain
 
 
 class gdatstrt(object):
     
     """
     init: Initializes all the testing data -- has all variables needed for testing
-    appdfcon: add a fully connected layer
     appdcon1: add a 1D convolutional layer
     retr_metr: returns all metrics of the network
     """
     
     def __init__(self):
+        pass
     
-        # fraction of data samples that will be used to test the model
-        self.fractest = 0.1
-    
-        # number of epochs
-        self.numbepoc = 20
-    
-        # number of runs for each configuration in order to determine the statistical uncertainty
-        self.numbruns = 3
-
-        self.indxepoc = np.arange(self.numbepoc)
-        self.indxruns = np.arange(self.numbruns)
-
-        # a dictionary to hold the variable values for which the training will be repeated
-        self.listvalu = {}
-        ## generative parameters of mock data
-        self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
-        # temp
-        self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) 
-
-        self.listvalu['zoomtype'] = ['locl', 'glob']
-        
-        if self.datatype == 'simpmock':
-            ## generative parameters of mock data
-            self.listvalu['numbtime'] = np.array([1e1, 3e1, 1e2, 3e2, 1e3]).astype(int)
-            # temp
-            self.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
-
-            self.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
-
-            #self.listvalu['numbdata'] = np.array([3e3, 1e4 , 3e4, 1e5, 3e5]).astype(int)
-            self.listvalu['numbdata'] = np.array([3e3, 1e4 , 300, 1e5, 3e5]).astype(int)
-
-            self.listvalu['fracplan'] = [0.1, 0.3 , 0.5, 0.7, 0.9] # frac P/N
-
-        ## hyperparameters
-        ### data augmentation
-        self.listvalu['zoomtype'] = ['locl', 'glob']
-        
-        ### neural network
-        #### batch size
-        self.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
-        #### number of layers
-        self.listvalu['numblayr'] = [1, 2, 3, 4, 5]
-        #### number of dimensions in each layer
-        self.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
-        #### fraction of dropout in in each layer
-        self.listvalu['fracdrop'] = [0., 0.15, 0.3, 0.45, 0.6]
-        
-        # list of strings holding the names of the variables
-        self.liststrgvarb = self.listvalu.keys()
-        
-        self.numbvarb = len(self.liststrgvarb) # number of variables
-        self.indxvarb = np.arange(self.numbvarb) # array of all indexes to get any variable
-        
-        self.numbvalu = np.empty(self.numbvarb, dtype=int)
-        self.indxvalu = [[] for o in self.indxvarb]
-        for o, strgvarb in enumerate(self.liststrgvarb):
-            self.numbvalu[o] = len(self.listvalu[strgvarb])
-            self.indxvalu[o] = np.arange(self.numbvalu[o])
-    
-        # dictionary to hold the metrics resulting from the runs
-        self.dictmetr = {}
-        self.liststrgmetr = ['prec', 'accu', 'reca']
-        self.listlablmetr = ['Precision', 'Accuracy', 'Recall']
-        self.liststrgrtyp = ['vali', 'tran']
-        self.listlablrtyp = ['Training', 'Validation']
-        self.numbrtyp = len(self.liststrgrtyp)
-        self.indxrtyp = np.arange(self.numbrtyp)
-        
-        for o, strgvarb in enumerate(self.liststrgvarb):
-            self.dictmetr[strgvarb] = np.empty((2, 3, self.numbruns, self.numbvalu[o]))
-
-    
-    # trying to condense all class things into one __init__ so all methods can just be called here
-    def appdfcon(self, fracdrop, strglayr='init'):
-        """
-        Functionally can be added at any point in the model
-
-        fracdrop: fraction of drop-out
-        strglayr: 'init', 'medi', 'finl'
-        """
-
-        if strglayr == 'init':
-            self.modl.add(Dense(self.numbdimslayr, input_dim=self.numbtime, activation='relu'))
-        elif strglayr == 'medi':
-            self.modl.add(Dense(self.numbdimslayr, activation= 'relu'))
-        elif strglayr == 'finl':
-            self.modl.add(Dense(1, activation='sigmoid'))
-        
-        if fracdrop > 0.:
-            self.modl.add(Dropout(fracdrop)) # do we want this as an input or from the object?
-        
-
-    def appdcon1(self, strgactv='relu'):
-        """
-        Adds a 1D CNN layer to the network
-        This should not be the last layer!
-
-        fracdrop: fraction of drop-out
-        strglayr: 'init', 'medi', 'finl'
-        """
-        
-        self.modl.add(Conv1D(64, kernel_size=3, input_shape=(self.numbtime, 1), activation='relu'))
-        self.modl.add(MaxPooling1D(pool_size=2, strides=1))
-        self.modl.add(Flatten())
-
-    def retr_metr(self, indxvaluthis=None, strgvarbthis=None):     
-        """
-        Performance method
-        """
-
-        metr = np.zeros((self.numbepoc, 2, 3 )) - 1 # element 4 is area under the curve
-        """, 10"""
-        # trapezoidal rule to find the area under the curve from recall vs precision
-
-        loss = np.empty(self.numbepoc)
-        numbepocchec = 5 # hard coded
-        
-        print(self.modl.summary())
-        for y in self.indxepoc:
-            histinpt = self.inpt[:, :, None]    # instead of updating self.inpt, which makes the size increase per call
-            hist = self.modl.fit(histinpt, self.outp, epochs=self.numbepoc, batch_size=self.numbdatabtch, validation_split=self.fractest, verbose=1)
-            loss[y] = hist.history['loss'][0]
-            indxepocloww = max(0, y - numbepocchec)
-            if y == self.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
-                print('Warning! The optimizer may not have converged.')
-                print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
-
-            for r in self.indxrtyp:
-                if r==0:
-                    inpt = self.inpttran
-                    outp = self.outptran
-                    numdatatemp = self.numbdatatran
-                else:
-                    inpt = self.inpttest
-                    outp = self.outptest
-                    numbdatatemp = self.numbdatatest
-
-                inpt = inpt[:, :, None]
-                
-                assert np.isfinite(inpt).all()
-
-                outppred = (self.modl.predict(inpt) > 0.5).astype(int) # this is threshold run for different values here
-                matrconf = confusion_matrix(outp, outppred)
-                if matrconf.size == 1:
-                    matrconftemp = np.copy(matrconf)
-                    matrconf = np.empty((2, 2))
-                    matrconf[0, 0] = matrconftemp
-                trne = matrconf[0, 0]
-                flpo = matrconf[0, 1]
-                flne = matrconf[1, 0]
-                trpo = matrconf[1, 1]
-                
-                print 'inpt'
-                summgene(inpt)
-                print 'outppred'
-                summgene(outppred)
-                print 'matrconf'
-                print matrconf
-                print 
-
-                if float(trpo + flpo) > 0:
-                    metr[y, r, 0] = trpo / float(trpo + flpo) # precision
-                else:
-                    print ('No positive found...')
-                    #raise Exception('')
-                metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne) # accuracy
-                if float(trpo + flne) > 0:
-                    metr[y, r, 2] = trpo / float(trpo + flne) # recall
-                else:
-                    raise Exception('')
-                
-        return metr
-
 
 def summgene(varb):
     '''
     convenience function to quickly print a numpy array
     '''
+    try:
+        print (np.amin(varb))
+        print (np.amax(varb))
+        print (np.mean(varb))
+        print (varb.shape)
+    except:
+        print varb
+
+
+def appdfcon(gdat):
     
-    print (np.amin(varb))
-    print (np.amax(varb))
-    print (np.mean(varb))
-    print (varb.shape)
+    if gdat.numblayr == 1:
+        gdat.modl.add(Dropout(gdat.fracdrop))
+        gdat.modl.add(Dense(1, input_dim=gdat.numbphas, activation='sigmoid'))
+    else:
+        gdat.modl.add(Dropout(gdat.fracdrop))
+        gdat.modl.add(Dense(gdat.numbdimslayr, input_dim=gdat.numbphas, activation='relu'))
+        for k in range(gdat.numblayr):
+            gdat.modl.add(Dropout(gdat.fracdrop))
+            gdat.modl.add(Dense(gdat.numbdimslayr, activation= 'relu'))
+        gdat.modl.add(Dropout(gdat.fracdrop))
+        gdat.modl.add(Dense(1, activation='sigmoid'))
+    
+
+def appdcon1(gdat, strgactv='relu'):
+    
+    gdat.modl.add(Conv1D(16, kernel_size=5, input_shape=(gdat.numbphas, 1), activation='relu', padding='same'))
+    gdat.modl.add(MaxPooling1D(pool_size=5, strides=2, padding='same'))
+    gdat.modl.add(Conv1D(16, kernel_size=5, activation='relu', padding='same'))
+    gdat.modl.add(MaxPooling1D(pool_size=5, strides=2, padding='same'))
+    gdat.modl.add(Conv1D(16, kernel_size=5, activation='relu', padding='same'))
+    gdat.modl.add(MaxPooling1D(pool_size=5, strides=2, padding='same'))
+    gdat.modl.add(Conv1D(16, kernel_size=5, activation='relu', padding='same'))
+    gdat.modl.add(MaxPooling1D(pool_size=5, strides=2, padding='same'))
+    gdat.modl.add(Flatten())
+
+
+def retr_metr(gdat, indxvaluthis=None, strgvarbthis=None):     
+    """
+    Calculates the binary classification metrics such as accuracy, recall and precision
+    """
+
+    metr = np.zeros((gdat.numbepoc, 2, 3 )) - 1
+
+    loss = np.empty(gdat.numbepoc)
+    numbepocchec = 5 # hard coded
+    
+    print(gdat.modl.summary())
+    print 'gdat.inpttran'
+    summgene(gdat.inpttran)
+    print 'gdat.outptran'
+    summgene(gdat.outptran)
+    print 'gdat.inpttest'
+    summgene(gdat.inpttest)
+    print 'gdat.outptest'
+    summgene(gdat.outptest)
+    for y in gdat.indxepoc:
+        print 'Training epoch %d...' % y
+        histinpt = gdat.inpttran[:, :, None]
+        hist = gdat.modl.fit(histinpt, gdat.outptran, epochs=1, batch_size=gdat.numbdatabtch, verbose=1)
+        loss[y] = hist.history['loss'][0]
+        indxepocloww = max(0, y - numbepocchec)
+        if y == gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
+            print('Warning! The optimizer may not have converged.')
+            print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
+
+        for r in gdat.indxrtyp:
+            if r == 0:
+                inpt = gdat.inpttran
+                outp = gdat.outptran
+                numdatatemp = gdat.numbdatatran
+            else:
+                inpt = gdat.inpttest
+                outp = gdat.outptest
+                numbdatatemp = gdat.numbdatatest
+            inpt = inpt[:, :, None]
+            
+            outppredsigm = gdat.modl.predict(inpt)
+            outppred = (outppredsigm > 0.5).astype(int)
+            matrconf = confusion_matrix(outp, outppred)
+            if matrconf.size == 1:
+                matrconftemp = np.copy(matrconf)
+                matrconf = np.empty((2, 2))
+                matrconf[0, 0] = matrconftemp
+            trne = matrconf[0, 0]
+            flpo = matrconf[0, 1]
+            flne = matrconf[1, 0]
+            trpo = matrconf[1, 1]
+            
+            print 'r'
+            print r
+            print 'outppred'
+            summgene(outppred)
+            print 'outppredsigm[where(outp == 0)]'
+            summgene(outppredsigm[np.where(outp == 0)])
+            print 'outppredsigm[where(outp == 1)]'
+            summgene(outppredsigm[np.where(outp == 1)])
+            print 'matrconf'
+            print matrconf
+
+            if float(trpo + flpo) > 0:
+                metr[y, r, 0] = trpo / float(trpo + flpo) # precision
+            else:
+                pass
+                #print ('No positive found...')
+                #raise Exception('')
+            metr[y, r, 1] = float(trpo + trne) / (trpo + flpo + trne + flne) # accuracy
+            if float(trpo + flne) > 0:
+                metr[y, r, 2] = trpo / float(trpo + flne) # recall
+            else:
+                print 'No relevant sample!'
+                #raise Exception('')
+            
+            print 'metr[y, r, :]'
+            print metr[y, r, :]
+            print 
+    return metr
 
 
 def expl( \
@@ -301,8 +163,9 @@ def expl( \
          strgtopo='fcon', \
          # if local, operates normal, if local+globa or dub(double) it will take local and global at the same time
          zoomtype='locl', \
-         phastype='fold', \
-         datatype='ete6', \
+         phastype='flbn', \
+         datatype='simpmock', \
+         #datatype='tess', \
 ):
 
     '''
@@ -310,10 +173,102 @@ def expl( \
     '''
     
     # global object that will hold global variables
-    # this can be wrapped in a function to allow for customization 
-    # initialize the data here
     gdat = gdatstrt()
     
+    gdat.datatype = datatype
+    
+    # Boolean flag to use light curves folded and binned  by SPOC
+    if datatype == 'tess':
+        gdat.boolspocflbn = True
+    else:
+        gdat.boolspocflbn = False
+    
+    # fraction of data samples that will be used to test the model
+    gdat.fractest = 0.1
+    
+    # number of epochs
+    gdat.numbepoc = 20
+    
+    # number of runs for each configuration in order to determine the statistical uncertainty
+    gdat.numbruns = 1
+
+    gdat.indxepoc = np.arange(gdat.numbepoc)
+    gdat.indxruns = np.arange(gdat.numbruns)
+
+    # a dictionary to hold the variable values for which the training will be repeated
+    gdat.listvalu = {}
+    # temp
+    gdat.listvalu['dept'] = 1 - np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) 
+
+    gdat.listvalu['zoomtype'] = ['locl', 'glob']
+    
+    gdat.numbtime = 10000
+
+    if gdat.datatype == 'simpmock':
+
+        ## generative parameters of mock data
+        #gdat.listvalu['numbphas'] = np.array([1e1, 3e1, 1000, 3e2, 1e3]).astype(int)
+        gdat.listvalu['numbphas'] = np.array([2000]).astype(int)
+        # temp
+        #gdat.listvalu['dept'] = np.array([1e-3, 3e-3, 3e-1, 3e-2, 1e-1]) 
+        gdat.listvalu['dept'] = np.array([3e-1]) 
+        #gdat.listvalu['nois'] = np.array([1e-3, 3e-3, 1e-2, 3e-2, 1e-1]) # SNR 
+        gdat.listvalu['nois'] = np.array([1e-3, 1e-1, 1e1]) # SNR 
+        #gdat.listvalu['numbrele'] = np.array([3e3, 1e4 , 10, 1e5, 3e5]).astype(int)
+        gdat.listvalu['numbrele'] = np.array([300]).astype(int)
+        #gdat.listvalu['numbirre'] = np.array([3e3, 1e4 , 100, 1e5, 3e5]).astype(int)
+        gdat.listvalu['numbirre'] = np.array([300]).astype(int)
+
+    else:
+        ## generative parameters of mock data
+        gdat.listvalu['numbphas'] = np.array([1e1, 3e1, 20076, 3e2, 1e3]).astype(int)
+        ## generative parameters of mock data
+
+        gdat.listvalu['numbrele'] = np.array([100]).astype(int)
+        gdat.listvalu['numbirre'] = np.array([100]).astype(int)
+
+    ## hyperparameters
+    ### data augmentation
+    #gdat.listvalu['zoomtype'] = ['locl', 'glob']
+    gdat.listvalu['zoomtype'] = ['glob']
+    ### neural network
+    #### batch size
+    #gdat.listvalu['numbdatabtch'] = [16, 32, 64, 128, 256]
+    gdat.listvalu['numbdatabtch'] = [64]
+    #### number of FC layers
+    #gdat.listvalu['numblayr'] = [1, 2, 3, 4, 5]
+    gdat.listvalu['numblayr'] = [1]
+    #### number of dimensions in each layer
+    #gdat.listvalu['numbdimslayr'] = [32, 64, 128, 256, 512]
+    gdat.listvalu['numbdimslayr'] = [128]
+    #### fraction of dropout in in each layer
+    #gdat.listvalu['fracdrop'] = [0., 0.15, 0.3, 0.45, 0.6]
+    gdat.listvalu['fracdrop'] = [0.3]
+    
+    # list of strings holding the names of the variables
+    gdat.liststrgvarb = gdat.listvalu.keys()
+    
+    gdat.numbvarb = len(gdat.liststrgvarb) # number of variables
+    gdat.indxvarb = np.arange(gdat.numbvarb) # array of all indexes to get any variable
+    
+    gdat.numbvalu = np.empty(gdat.numbvarb, dtype=int)
+    gdat.indxvalu = [[] for o in gdat.indxvarb]
+    for o, strgvarb in enumerate(gdat.liststrgvarb):
+        gdat.numbvalu[o] = len(gdat.listvalu[strgvarb])
+        gdat.indxvalu[o] = np.arange(gdat.numbvalu[o])
+    
+    # dictionary to hold the metrics resulting from the runs
+    gdat.dictmetr = {}
+    gdat.liststrgmetr = ['prec', 'accu', 'reca']
+    gdat.listlablmetr = ['Precision', 'Accuracy', 'Recall']
+    gdat.liststrgrtyp = ['vali', 'tran']
+    gdat.listlablrtyp = ['Training', 'Validation']
+    gdat.numbrtyp = len(gdat.liststrgrtyp)
+    gdat.indxrtyp = np.arange(gdat.numbrtyp)
+    
+    for o, strgvarb in enumerate(gdat.liststrgvarb):
+        gdat.dictmetr[strgvarb] = np.empty((2, 3, gdat.numbruns, gdat.numbvalu[o]))
+
     gdat.phastype = phastype
 
     ## time stamp string
@@ -326,17 +281,15 @@ def expl( \
     os.system('mkdir -p %s' % pathplot)
     print ('Will generate plots in %s' % pathplot)
     
-    """"
     # detect names of devices, disabled for the moment
     from tensorflow.python.client import device_lib
     listdictdevi = device_lib.list_local_devices()
     print ('Names of the devices detected: ')
     for dictdevi in listdictdevi:
         print (dictdevi.name)
-    """
     
-    gdat.numbtimebins = 100
-    gdat.indxtimebins = np.arange(gdat.numbtimebins)
+    #gdat.numbphas = 20076
+    #gdat.indxphas = np.arange(gdat.numbphas)
 
     # temp
     gdat.maxmindxvarb = 10
@@ -344,26 +297,29 @@ def expl( \
     # for each run
     for t in gdat.indxruns:
         
-        print ('Run index %d' % t)
+        print 'Run index %d...' % t
         # do the training for the central value
         # temp -- current implementation repeats running of the central point
-        #metr = gdat.retr_metr()
+        #metr = gdat.retr_metr(gdat)
         
         # for each variable
         for o, strgvarb in enumerate(gdat.liststrgvarb): 
             
             if o == gdat.maxmindxvarb:
                 break
+            
+            if len(gdat.indxvalu[o]) == 1:
+                continue
 
-            print ('Processing variable %s...' % strgvarb)
+            print 'Processing variable %s...' % strgvarb
 
             # for each value
             for i in gdat.indxvalu[o]:
                 
-                pathsave = pathplot + '%04d%04d%04d.fits' % (t, o, i)
+                pathsave = pathplot + 'save_metr_%04d_%04d_%04d.fits' % (t, o, i)
                 # temp
                 if False and os.path.exists(pathsave):
-                    print ('Reading %s...' % pathsave)
+                    print ('Reading from %s...' % pathsave)
                     listhdun = ap.io.fits.open(pathsave)
                     metr = listhdun[0].data
                 else:
@@ -377,15 +333,14 @@ def expl( \
                     else:
                         print('Value: %g' % gdat.listvalu[strgvarb][i])
                     
-                    
                     for strgvarbtemp in gdat.liststrgvarb: 
                         print (strgvarbtemp)
                         print (getattr(gdat, strgvarbtemp))
 
-                    gdat.numbplan = int(gdat.numbdata * gdat.fracplan)
-                    gdat.numbnois = gdat.numbdata - gdat.numbplan
+                    gdat.numbdata = gdat.numbrele + gdat.numbirre
+                    gdat.fracrele = gdat.numbrele / float(gdat.numbdata)
                     
-                    gdat.indxtime = np.arange(gdat.numbtime)
+                    gdat.indxphas = np.arange(gdat.numbphas)
                     gdat.indxdata = np.arange(gdat.numbdata)
                     gdat.indxlayr = np.arange(gdat.numblayr)
 
@@ -393,117 +348,127 @@ def expl( \
                     gdat.numbdatatest = int(gdat.numbdata * gdat.fractest)
                     # number of training data samples
                     gdat.numbdatatran = gdat.numbdata - gdat.numbdatatest
-                    # number of signal data samples
-                    numbdataplan = int(gdat.numbdata * gdat.fracplan)
                     
                     if datatype == 'simpmock':
-                        gdat.inptraww, gdat.outp = exopmain.retr_datamock(numbplan=gdat.numbplan, \
-                                numbnois=gdat.numbnois, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+                        gdat.inptraww, gdat.outp, gdat.peri = exopmain.retr_datamock(numbplan=gdat.numbrele, \
+                                                    numbnois=gdat.numbirre, numbtime=gdat.numbtime, dept=gdat.dept, nois=gdat.nois)
+                        gdat.time = np.tile(np.linspace(0., (gdat.numbtime - 1) / 30. / 24., gdat.numbtime), (gdat.numbdata, 1))
+                        gdat.legdoutp = []
+                        for k in gdat.indxdata:
+                            legd = '%d, ' % k
+                            if gdat.outp[k] == 1:
+                                legd += 'R'
+                            else:
+                                legd += 'I'
+                            gdat.legdoutp.append(legd)
 
                     if datatype == 'ete6':
-                        print 'gdat.numbdata'
-                        print gdat.numbdata
                         gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_dataete6(numbdata=gdat.numbdata, nois=gdat.nois)
                     
                     if datatype == 'tess':
-                        gdat.time, gdat.inptraww, gdat.outp, gdat.tici, gdat.peri = exopmain.retr_datatess()
-                    
+                        if gdat.boolspocflbn:
+                            gdat.phas, gdat.inptflbn, gdat.outp, gdat.legdoutp, gdat.tici, gdat.itoi = exopmain.retr_datatess(gdat.boolspocflbn) 
+                        else:
+                            gdat.time, gdat.inptraww, gdat.outp, gdat.legdoutp, gdat.tici, gdat.itoi = exopmain.retr_datatess(gdat.boolspocflbn)
+
                     if gdat.phastype == 'raww':
                         gdat.inpt = gdat.inptraww
-    
         
-                    print 'gdat.phastype'
-                    print gdat.phastype
-                    print
+                    if gdat.phastype == 'flbn':
+                        if not gdat.boolspocflbn:   
+                            strgsave = '%s_%d_%s_%04d_%04d_%04d' % \
+                                            (datatype, np.log10(gdat.nois) + 5., gdat.zoomtype, gdat.numbphas, gdat.numbrele, gdat.numbirre)
+                            pathsaveflbn = pathplot + 'save_flbn_%s' % strgsave + '.dat' 
+                            pathsavephas = pathplot + 'save_phas_%s' % strgsave + '.dat' 
+                            if not os.path.exists(pathsaveflbn):
+                                cntr = 0
+                                gdat.inptflbn = np.empty((gdat.numbdata, gdat.numbphas))
+                                gdat.phas = np.empty((gdat.numbdata, gdat.numbphas))
+                                # temp
+                                flux_err = np.zeros(gdat.numbtime) + 1e-2
+                                for k in gdat.indxdata:
+                                    lcurobjt = lightkurve.lightcurve.LightCurve(flux=gdat.inptraww[k, :], time=gdat.time[k, :], \
+                                                                                        flux_err=flux_err, time_format='jd', time_scale='utc')
+                                    
+                                    lcurobjtfold = lcurobjt.fold(gdat.peri[k])
+                                    lcurobjtflbn = lcurobjtfold.bin(binsize=gdat.numbtime/gdat.numbphas, method='mean')
+                                    gdat.inptflbn[k, :] = lcurobjtflbn.flux
+                                    gdat.phas[k, :] = lcurobjtflbn.time
+                                    assert np.isfinite(gdat.inptflbn[k, :]).all()
 
-                    if gdat.phastype == 'fold':
-                        pathsavefold= pathplot + 'savefold_%s%s%04d' % (datatype, gdat.zoomtype, gdat.numbtimebins) + '.dat' 
-                        # temp
-                        if True or os.path.exists(pathsavefold):
-                            cntr = 0
-                            gdat.inptfdbn = np.empty((gdat.numbdata, gdat.numbtimebins))
-                            for k in gdat.indxdata:
-                                numbperi = gdat.peri[cntr].size
-                                indxperi = np.arange(numbperi)
-                                # temp -- only uses the first period
-                                print 'k'
-                                print k
-                                print 'gdat.inptraww[k, :]'
-                                summgene(gdat.inptraww[k, :])
-                                print 'gdat.peri[k]'
-                                print gdat.peri[k]
-                                
-                                lightkurve
-
-                                gdat.inptfdbn[k, :] = fdbn_lcur(gdat.numbtimebins, gdat.time, gdat.inptraww[k, :], abs(gdat.peri[k][0]), 0., \
-                                                                                                                                    zoomtype=gdat.zoomtype)
-                        
-                                print 'gdat.inptfdbn[k, :]'
-                                summgene(gdat.inptfdbn[k, :])
-                                print
-                                assert np.isfinite(gdat.inptfdbn[k, :]).all()
-
-                            print 'Writing to %s...' % pathsavefold
-                            np.savetxt(pathsavefold, gdat.inptfdbn)
+                                print 'Writing to %s...' % pathsaveflbn
+                                np.savetxt(pathsaveflbn, gdat.inptflbn)
+                                np.savetxt(pathsavephas, gdat.phas)
+                            else:
+                                print 'Reading from %s...' % pathsaveflbn
+                                gdat.inptflbn = np.loadtxt(pathsaveflbn)
+                                gdat.phas = np.loadtxt(pathsavephas)
+                            gdat.inpt = gdat.inptflbn
                         else:
-                            print 'Reading from %s...' % pathsavefold
-                            gdat.inptfdbn = np.loadtxt(pathsavefold)
-                        gdat.inpt = gdat.inptfdbn
+                            gdat.inpt = gdat.inptflbn
 
                     # plot
-                    figr, axis = plt.subplots(figsize=(12, 6))
-                    for k in gdat.indxdata:
-                        if k < 10:
+                    numbplotfram = 1
+                    print 'Making plots of the input...'
+                    listphastype = ['flbn']
+                    if not gdat.boolspocflbn:
+                        listphastype += ['raww']
+                    for phastype in listphastype:
+                        cntrplot = 0
+                        for k in gdat.indxdata:
+                            if k > 10:
+                                break
+                            if k % numbplotfram == 0:
+                                figr, axis = plt.subplots(figsize=(12, 6))
                             if gdat.outp[k] == 1:
-                                colr = 'r'
-                            else:
                                 colr = 'b'
-                            if gdat.phastype == 'raww':
-                                indx = gdat.indxtime
-                            if gdat.phastype == 'fold':
-                                indx = gdat.indxtimebins
-                            axis.plot(indx, gdat.inpt[k, :], marker='o', ls='-', markersize=5, alpha=0.6, color=colr)
-                    plt.tight_layout()
-                    plt.xlabel('Time')
-                    plt.ylabel('Flux')
-                    plt.legend()
-                    path = pathplot + strgtimestmp + 'inpt_%04d%s%04d' % (t, strgvarb, i) + '.pdf' 
-                    print 'Writing to %s...' % path
-                    plt.savefig(path)
-                    plt.close()
-        
-                    assert np.isfinite(gdat.inpt).all()
-                    assert np.isfinite(gdat.outp).all()
+                            else:
+                                colr = 'r'
+                            if phastype == 'raww':
+                                xdat = gdat.time[k, :]
+                                ydat = gdat.inptraww[k, :]
+                            if phastype == 'flbn':
+                                xdat = gdat.phas[k, :]
+                                ydat = gdat.inptflbn[k, :]
+                            axis.plot(xdat, ydat, marker='o', markersize=5, alpha=0.6, color=colr, ls='')
+                            if k % numbplotfram == 0 or k == gdat.numbdata - 1:
+                                plt.tight_layout()
+                                if phastype == 'raww':
+                                    plt.xlabel('Time')
+                                if phastype == 'flbn':
+                                    plt.xlabel('Phase')
+                                plt.ylabel('Flux')
+                                plt.legend()
+                                path = pathplot + 'inpt%s_%04d_%s_%04d_%04d' % (phastype, t, strgvarb, i, cntrplot) + '.png' 
+                                print 'Writing to %s...' % path
+                                plt.savefig(path)
+                                plt.close()
+                                cntrplot += 1
+                    
+                    #assert np.isfinite(gdat.inpt).all()
+                    #assert np.isfinite(gdat.outp).all()
 
                     # divide the data set into training and test data sets
                     numbdatatest = int(gdat.fractest * gdat.numbdata)
-                    gdat.inpttest = gdat.inpt[:numbdatatest, :]
+                    gdat.inpttest = gdat.inpt[:numbdatatest]
                     gdat.outptest = gdat.outp[:numbdatatest]
-                    gdat.inpttran = gdat.inpt[numbdatatest:, :]
+                    gdat.inpttran = gdat.inpt[numbdatatest:]
                     gdat.outptran = gdat.outp[numbdatatest:]   
 
                     gdat.modl = Sequential()
 
                     # construct the neural net
                     # add a CNN
-                    gdat.appdcon1()
-                    
-                    # add the first fully connected layer
-                    gdat.appdfcon(gdat.fracdrop)
-                    
-                    ## add other fully connected layers
-                    if gdat.numblayr > 2:
-                        for k in range(gdat.numblayr - 2):
-                            gdat.appdfcon(gdat.fracdrop, strglayr='medi')
+                    appdcon1(gdat)
                     
                     ## add the last output layer
-                    gdat.appdfcon(gdat.fracdrop, strglayr='finl') # do we do a fracdrop on the last layer?
+                    appdfcon(gdat)
                     
                     gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
                     
                     # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                     # do the training for the specific value of the variable of interest
-                    metr = gdat.retr_metr(i, strgvarb)
+                    metr = retr_metr(gdat, i, strgvarb)
 
                     # save to the disk
                     hdun = ap.io.fits.PrimaryHDU(metr)
@@ -523,6 +488,9 @@ def expl( \
         
         if o == gdat.maxmindxvarb:
             break
+
+        if len(gdat.indxvalu[o]) == 1:
+            continue
 
         for l, strgmetr in enumerate(gdat.liststrgmetr):
             figr, axis = plt.subplots() # figr unused
@@ -553,7 +521,7 @@ def expl( \
                     axis.plot(gdat.listvalu[strgvarb], gdat.dictmetr[strgvarb][r, l, t, :], marker='D', ls='', markersize=5, alpha=alph, color=colr)
             
             #axis.set_ylim([-0.1, 1.1])
-            if strgvarb == 'numbtime':
+            if strgvarb == 'numbphas':
                 labl = '$N_{time}$'
             
             if strgvarb == 'dept':
@@ -580,7 +548,7 @@ def expl( \
             axis.set_ylabel(gdat.listlablmetr[l]) 
             axis.set_xlabel(labl) 
             
-            if strgvarb in ['numbdata', 'numbtime', 'dept', 'nois', 'numbdimslayr', 'numbdatabtch']:
+            if strgvarb in ['numbdata', 'numbphas', 'dept', 'nois', 'numbdimslayr', 'numbdatabtch']:
                 axis.set_xscale('log')
 
             plt.legend()
@@ -589,7 +557,7 @@ def expl( \
             plt.xlabel(labl)
             plt.ylabel(gdat.listlablmetr[l])
 
-            path = pathplot + strgvarb + strgmetr + '_' + strgtimestmp + '.pdf' 
+            path = pathplot + strgvarb + strgmetr + '.pdf' 
             plt.savefig(path)
             plt.close()
     
