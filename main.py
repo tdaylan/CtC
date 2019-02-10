@@ -4,6 +4,8 @@ import datetime, os
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten
+import keras.utils
+from keras import backend as K
 
 import tensorflow as tf
 
@@ -23,12 +25,6 @@ from exop import main as exopmain
 
 
 class gdatstrt(object):
-    
-    """
-    init: Initializes all the testing data -- has all variables needed for testing
-    appdcon1: add a 1D convolutional layer
-    retr_metr: returns all metrics of the network
-    """
     
     def __init__(self):
         pass
@@ -76,6 +72,7 @@ def appdcon1(gdat, strgactv='relu'):
 
 
 def retr_metr(gdat, indxvaluthis=None, strgvarbthis=None):     
+    
     """
     Calculates the binary classification metrics such as accuracy, recall and precision
     """
@@ -100,6 +97,30 @@ def retr_metr(gdat, indxvaluthis=None, strgvarbthis=None):
         hist = gdat.modl.fit(histinpt, gdat.outptran, epochs=1, batch_size=gdat.numbdatabtch, verbose=1)
         loss[y] = hist.history['loss'][0]
         indxepocloww = max(0, y - numbepocchec)
+        
+        for layr in gdat.modl.layers:
+            func = keras.backend.function([gdat.modl.input, keras.backend.learning_phase()], [layr.output])
+            
+            listweigbias = layr.get_weights()
+            #assert len(listweigbias) == 2
+            print 'listweigbias'
+            for n in range(len(listweigbias)):
+                print 'n'
+                print n
+                print 'listweigbias[n]'
+                summgene(listweigbias[n])
+            stat = func([histinpt, 1.])
+            print 'type(stat)'
+            print type(stat)
+            print 'len(stat)'
+            print len(stat)
+            for n in range(len(stat)):
+                print 'stat[n]'
+                summgene(stat[n])
+                print
+            print
+
+
         if y == gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
             print('Warning! The optimizer may not have converged.')
             print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
@@ -316,7 +337,8 @@ def expl( \
             # for each value
             for i in gdat.indxvalu[o]:
                 
-                pathsave = pathplot + 'save_metr_%04d_%04d_%04d.fits' % (t, o, i)
+                strgconf = '%04d_%04d_%04d' % (t, o, i)
+                pathsave = pathplot + 'save_metr_%s.fits' % strgconf
                 # temp
                 if False and os.path.exists(pathsave):
                     print ('Reading from %s...' % pathsave)
@@ -465,6 +487,9 @@ def expl( \
                     appdfcon(gdat)
                     
                     gdat.modl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+    
+                    pathsave = pathplot + 'modlgrap_%s.png' % strgconf
+                    keras.utils.plot_model(gdat.modl, to_file=pathsave)
                     
                     # temp -- this runs the central value redundantly and can be sped up by only running the central value once for all variables
                     # do the training for the specific value of the variable of interest
