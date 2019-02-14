@@ -4,6 +4,169 @@ import tensorflow as tf
 import numpy as np
 import keras
 
+
+# FROM PAPER
+
+import keras
+from keras.models import Sequential, Model, load_model
+from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten, Input, Concatenate, GlobalMaxPool1D
+
+import tensorflow as tf
+
+# CONVOLUTIONAL MODELS
+
+# models from "Scientific Domain Knowledge Improves Exoplanet Transit Classification with Deep Learning"
+
+# aka astronet
+def exonet():
+    loclinpt, globlinpt = 200, 2000 # hard coded for now
+    padX = 'same'
+    padY = 'valid'
+
+    localinput = Input(shape=(int(loclinpt),1), dtype='float32', name='localinput') 
+
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu', input_shape=(loclinpt,1))(localinput)
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu')(x)
+
+    x = MaxPooling1D(pool_size=7, strides=2, padding=padX)(x)
+
+    x = Conv1D(kernel_size=5, filters=32, padding=padX, activation='relu')(x)
+    x = Conv1D(kernel_size=5, filters=32, padding=padX, activation='relu')(x)
+
+    x = MaxPooling1D(pool_size=7, strides=2, padding=padX)(x)
+
+    # -----------------------------------------------------------------------------
+    globalinput = Input(shape=(int(globlinpt),1), dtype='float32', name='globalinput')
+
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu', input_shape=(globlinpt,1))(globalinput)
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
+
+    y = Conv1D(kernel_size=5, filters=32, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=32, padding=padY, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
+
+    y = Conv1D(kernel_size=5, filters=64, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=64, padding=padY, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
+
+    y = Conv1D(kernel_size=5, filters=128, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=128, padding=padY, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
+
+    y = Conv1D(kernel_size=5, filters=256, padding=padY, activation='relu')(y)
+    y = Conv1D(kernel_size=5, filters=256, padding=padY, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=5, strides=2, padding=padY)(y)
+    
+    """
+    print('shape test:', tf.keras.backend.shape(y))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[y])
+    print()
+    modldummy.summary()
+
+    print('shape test:', tf.keras.backend.shape(x))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[x])
+    print()
+    modldummy.summary()
+    """
+
+    # ------------------------------------------------------------------------------
+    z = keras.layers.concatenate([x, y])
+    z = Flatten()(z)
+    # ------------------------------------------------------------------------------
+
+    z = Dense(512, activation='relu')(z)
+    z = Dense(512, activation='relu')(z)
+    z = Dense(512, activation='relu')(z)
+    z = Dense(512, activation='relu')(z)
+
+    # ------------------------------------------------------------------------------
+    
+    finllayr = Dense(1, activation='sigmoid', name='finl')(z)
+
+    # ------------------------------------------------------------------------------
+    modlfinl = Model(inputs=[localinput, globalinput], outputs=[finllayr])
+
+    modlfinl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+    # modlfinl.summary()
+    return modlfinl
+
+def reduced():
+    loclinpt, globlinpt = 200, 2000 # hard coded for now
+    padX = 'same'
+    padY = 'same'
+
+    localinput = Input(shape=(int(loclinpt),1), dtype='float32', name='localinput') 
+
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu', input_shape=(loclinpt,1))(localinput)
+
+    x = MaxPooling1D(pool_size=2, strides=2, padding=padX)(x)
+
+    x = Conv1D(kernel_size=5, filters=16, padding=padX, activation='relu')(x)
+
+    x = GlobalMaxPool1D()(x)
+
+    # -----------------------------------------------------------------------------
+    globalinput = Input(shape=(int(globlinpt),1), dtype='float32', name='globalinput')
+
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu', input_shape=(globlinpt,1))(globalinput)
+
+    y = MaxPooling1D(pool_size=2, strides=2, padding=padY)(y)
+
+    y = Conv1D(kernel_size=5, filters=16, padding=padY, activation='relu')(y)
+
+    y = MaxPooling1D(pool_size=2, strides=2, padding=padY)(y)
+
+    y = Conv1D(kernel_size=5, filters=32, padding=padY, activation='relu')(y)
+
+    y = GlobalMaxPool1D()(y)
+
+
+    """
+    # print('shape test:', tf.keras.backend.shape(y))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[y])
+    print()
+    modldummy.summary()
+
+    print()
+
+    # print('shape test:', tf.keras.backend.shape(x))
+    modldummy = Model(inputs=[localinput, globalinput], outputs=[x])
+    print()
+    modldummy.summary()
+    """
+    
+    # ------------------------------------------------------------------------------
+    z = keras.layers.concatenate([x, y])
+
+    
+    # ------------------------------------------------------------------------------
+
+    z = Dense(1, activation='relu')(z)
+
+    # ------------------------------------------------------------------------------
+    finllayr = Dense(1, activation='sigmoid', name='finl')(z)
+
+    # ------------------------------------------------------------------------------
+    modlfinl = Model(inputs=[localinput, globalinput], outputs=[finllayr])
+
+    modlfinl.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
+
+    return modlfinl
+
+
+
+# -----------------------------------------------------------------
+
+
+# MODULAR
+
+
 # currently can't call this in the test function!
 def twoinput(dataclass, layers, fracdropbool=True):
     """
