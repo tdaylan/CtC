@@ -77,8 +77,11 @@ def train_cnn_autoencoder(light_curves, autoencoder, patience=50, verbose = Fals
 
 
 
-def one_datapoint(encoding_dim = 2, no_filters = 4, kernel_size = 3, pool_size = 4, dept=1e-2, nois=1e-3):
-	light_curves, labels = exopmain.retr_datamock(numbplan=100, numbnois=100, dept = dept, nois = nois)
+def compute_cfms(encoding_dim = 2, no_filters = 4, kernel_size = 3, pool_size = 4, dept=1e-2, nois=1e-3, usetess = False):
+	if usetess:
+		_, light_curve, labels, _, _,_ = exopmain.retr_datatess(True)
+	else:
+		light_curves, labels = exopmain.retr_datamock(numbplan=100, numbnois=100, dept = dept, nois = nois)
 	nrow, ncol = light_curves.shape
 	intermediate_size = int(ncol / math.log(ncol))
 
@@ -98,11 +101,95 @@ def one_datapoint(encoding_dim = 2, no_filters = 4, kernel_size = 3, pool_size =
 	
 	return autoencoder_result, autoencoder_std / np.sqrt(no_iterations)
 
+def snr_plots():
+	#look at various SNR; default to noise = 1, vary the signal
+	dept_range = np.geomspace(0.001, 0.1, num = 10)
+	nois_range = [0.0001 for i in range(0, len(dept_range))]
+
+	#default params
+	no_filters = 2
+	kernel_size = 3
+	pool_size = 4
 
 
-def simple_example(clustering = 'km'):
+	#print the architecture to file
+	filename = '___'.join(('{}_CNN_filters'.format(no_filters), 'kernel_size_{} '.format(kernel_size) , 'pool_size_{}'.format(pool_size) ))
+	encoder, autoencoder = model_cnn_autoencoder(ncol = 100, no_filters = no_filters, kernel_size = kernel_size, pool_size = pool_size, encoding_dim = 2, activation_function = 'relu', verbose = False)
+
+	orig_stdout = sys.stdout
+	f = open(filename, "a")
+	sys.stdout = f
+
+	print ('autoencoder architecture')
+	autoencoder.summary()
+	print ('encoder architecture')
+	encoder.summary()
+
+	sys.stdout = orig_stdout
+	f.close()
+
+
+	#these will hold results
+	tn_res_arr = [];  fp_res_arr = [];  fn_res_arr = [];  tp_res_arr = []; 
+	tn_std_arr = [];  fp_std_arr = [];  fn_std_arr = [];  tp_std_arr = []; 
+
+	for i in range(0, len(dept_range)):
+		dept = dept_range[i]; nois = nois_range[i];
+		autoencoder_result, autoencoder_std = compute_cfms(encoding_dim = 2, no_filters = no_filters, kernel_size = kernel_size, pool_size = pool_size, dept=dept, nois=nois)
+		print ('done with one datapoint')
+		tn_res, fp_res, fn_res, tp_res = autoencoder_result.ravel()
+		tn_std, fp_std, fn_std, tp_std = autoencoder_std.ravel()
+
+		tn_res_arr.append(tn_res);  fp_res_arr.append(fp_res);  fn_res_arr.append(fn_res);  tp_res_arr.append(tp_res); 
+		tn_std_arr.append(tn_std);  fp_std_arr.append(fp_std);  fn_std_arr.append(fn_std);  tp_std_arr.append(tp_std); 
+
+
+	plt.figure(figsize=(12, 9))
+
+
+	gs = gridspec.GridSpec(2, 2)
+
+	ax1 = plt.subplot(gs[0])
+	ax1.set_xscale('log')
+	plt.errorbar(np.divide(dept_range, nois_range), tn_res_arr, yerr=tn_std_arr, fmt='o')
+	plt.xlabel('SNR')
+	plt.ylabel('True negative percentage')
+
+	ax2 = plt.subplot(gs[1])
+	ax2.set_xscale('log')
+	plt.errorbar(np.divide(dept_range, nois_range), fp_res_arr, yerr=fp_std_arr, fmt='o')
+	plt.xlabel('SNR')
+	plt.ylabel('False positive percentage')
+
+	ax3 = plt.subplot(gs[2])
+	ax3.set_xscale('log')
+	plt.errorbar(np.divide(dept_range, nois_range), fn_res_arr, yerr=fn_std_arr, fmt='o')
+	plt.xlabel('SNR')
+	plt.ylabel('False negative percentage')
+
+	ax4 = plt.subplot(gs[3])
+	ax4.set_xscale('log')
+	plt.errorbar(np.divide(dept_range, nois_range), tp_res_arr, yerr=tp_std_arr, fmt='o')
+	plt.xlabel('SNR')
+	plt.ylabel('True positive percentage')
+
+	plt.savefig('results/' + filename)
+
+
+
+
+
+
+
+
+
+
+def l1_l2_grid(clustering = 'km', usetess = False):
 	dept = 100; nois = 1
-	light_curves, labels = exopmain.retr_datamock(numbplan=2500, numbnois=2500, dept = dept, nois = nois)
+	if usetess:
+		_, light_curve, labels, _, _,_ = exopmain.retr_datatess(True)
+	else:
+		light_curves, labels = exopmain.retr_datamock(numbplan=100, numbnois=100, dept = dept, nois = nois)
 	# plt.plot(range(0, len(light_curves[0])), light_curves[0])
 	# plt.show()
 	nrow, ncol = light_curves.shape
@@ -129,127 +216,49 @@ def simple_example(clustering = 'km'):
 			train_cnn_autoencoder(light_curves, autoencoder, patience=10, verbose = False)
 			latent_repr =  encoder.predict(light_curves)
 		
-			if clustering == 'km': clusters = find_km_clusters(latent_repr)
-			else: clusters = developing_find_clusters(latent_repr)
-
+			# if clustering == 'km': clusters = find_km_clusters(latent_repr)
+			# else: clusters = developing_find_clusters(latent_repr)
 
 			#visualize_2d(latent_repr, labels, clusters, l1_index, l2_index)
 			#visualize_just_clustering_2d(latent_repr, labels, l1_index, l2_index)
 
-			plt.imshow(matrix)
-
-def developing_find_clusters(latent_repr):
-	"""
-	clustering algorithm 
-	looks at histogram of distances b/w each point and origin 
-	"""
-	
-	origin = np.zeros(latent_repr[0].shape)
-	dist = [compute_distance(origin, point) for point in latent_repr]
-
-	#compute ranks in original distance list, and then sort its entries
-	ranks = ss.rankdata(dist)
-	sorted_dist = sorted(dist)
-
-	#do the histogram-based clustering
-	differences = [sorted_dist[i+1] - sorted_dist[i] for i in range(0, len(sorted_dist) -1)]
-	hist, bin_edges = np.histogram(differences)
-	print (len(bin_edges))
-	cutoff_rank = sum([1 if x > bin_edges[3] else 0 for x in differences]) #so everything in the first bin is non-planet
-
-	#compute and return labels
-	labels = [x >= cutoff_rank for x in ranks]
-	return labels
-
-
-simple_example()
-
-# if __name__ == "__main__":
-# 	#look at various SNR; default to noise = 1, vary the signal
-# 	dept_range = np.geomspace(0.001, 1000000, num = 10)
-# 	nois_range = [1 for i in range(0, len(dept_range))]
-
-
-
-# 	#default params
-# 	no_filters = 2
-# 	kernel_size = 20
-# 	pool_size = 4
-
-
-# 	for kernel_size in [10, 20, 30, 40]:
-# 		#string with current parameters
-# 		# params_str = '\n'.join((
-# 	 #    '{} CNN filters'.format(no_filters),
-# 	 #    'kernel size is {} '.format(kernel_size) ,
-# 	 #    'pool size is {}'.format(pool_size) ))
-
-# 		#print the architecture to file
-# 		filename = '___'.join(('{}_CNN_filters'.format(no_filters), 'kernel_size_{} '.format(kernel_size) , 'pool_size_{}'.format(pool_size) ))
-# 		encoder, autoencoder = model_cnn_autoencoder(ncol = 100, no_filters = no_filters, kernel_size = kernel_size, pool_size = pool_size, encoding_dim = 2, activation_function = 'relu', verbose = False)
-
-# 		orig_stdout = sys.stdout
-# 		f = open(filename, "a")
-# 		sys.stdout = f
-
-# 		print ('autoencoder architecture')
-# 		autoencoder.summary()
-# 		print ('encoder architecture')
-# 		encoder.summary()
-
-# 		sys.stdout = orig_stdout
-# 		f.close()
-
-
-# 		#these will hold results
-# 		tn_res_arr = [];  fp_res_arr = [];  fn_res_arr = [];  tp_res_arr = []; 
-# 		tn_std_arr = [];  fp_std_arr = [];  fn_std_arr = [];  tp_std_arr = []; 
-
-# 		for i in range(0, len(dept_range)):
-# 			dept = dept_range[i]; nois = nois_range[i];
-# 			autoencoder_result, autoencoder_std = one_datapoint(encoding_dim = 2, no_filters = no_filters, kernel_size = kernel_size, pool_size = pool_size, dept=dept, nois=nois)
-# 			print ('done with one datapoint, for one set of parameters')
-# 			tn_res, fp_res, fn_res, tp_res = autoencoder_result.ravel()
-# 			tn_std, fp_std, fn_std, tp_std = autoencoder_std.ravel()
-
-# 			tn_res_arr.append(tn_res);  fp_res_arr.append(fp_res);  fn_res_arr.append(fn_res);  tp_res_arr.append(tp_res); 
-# 			tn_std_arr.append(tn_std);  fp_std_arr.append(fp_std);  fn_std_arr.append(fn_std);  tp_std_arr.append(tp_std); 
-
-
-# 		plt.figure(figsize=(12, 9))
-
-
-# 		gs = gridspec.GridSpec(2, 2)
-
-# 		ax1 = plt.subplot(gs[0])
-# 		ax1.set_xscale('log')
-# 		plt.errorbar(np.divide(dept_range, nois_range), tn_res_arr, yerr=tn_std_arr, fmt='o')
-# 		plt.xlabel('SNR')
-# 		plt.ylabel('True negative percentage')
-
-# 		ax2 = plt.subplot(gs[1])
-# 		ax2.set_xscale('log')
-# 		plt.errorbar(np.divide(dept_range, nois_range), fp_res_arr, yerr=fp_std_arr, fmt='o')
-# 		plt.xlabel('SNR')
-# 		plt.ylabel('False positive percentage')
-
-# 		ax3 = plt.subplot(gs[2])
-# 		ax3.set_xscale('log')
-# 		plt.errorbar(np.divide(dept_range, nois_range), fn_res_arr, yerr=fn_std_arr, fmt='o')
-# 		plt.xlabel('SNR')
-# 		plt.ylabel('False negative percentage')
-
-# 		ax4 = plt.subplot(gs[3])
-# 		ax4.set_xscale('log')
-# 		plt.errorbar(np.divide(dept_range, nois_range), tp_res_arr, yerr=tp_std_arr, fmt='o')
-# 		plt.xlabel('SNR')
-# 		plt.ylabel('True positive percentage')
-
-# 		plt.savefig('results/' + filename)
-
-# 		print ('done with one set of parameters')
 
 
 
 
+if __name__ == "__main__":
+	no_filters = 4
+	kernel_size = 3
+	pool_size = 4
+	encoding_dim = 2
+	dept = 1e-2
+	nois = 1e-4
+
+	l1_param = 0.1
+	l2_param = 0.1
+
+	usetess = True
+
+
+	if usetess:
+		_, light_curve, labels, _, _,_ = exopmain.retr_datatess(True)
+	else:
+		light_curves, labels = exopmain.retr_datamock(numbplan=100, numbnois=100, dept = dept, nois = nois)
+
+	plt.figure()
+	for i in range(0,5):
+		plt.plot(range(0, len(light_curves[i])), light_curves[i])
+	plt.show()
+	nrow, ncol = light_curves.shape
+	light_curves = np.reshape(light_curves, (nrow, ncol, 1))
+	colors =  ["red" if x else "blue" for x in labels] #planet transits are red; others are blue
+
+	encoder, autoencoder = model_cnn_autoencoder(ncol = ncol, no_filters = no_filters, kernel_size = kernel_size, 
+				pool_size = pool_size, encoding_dim = encoding_dim, activation_function = 'relu', verbose = False, l1_param = l1_param, l2_param = l2_param )
+	train_cnn_autoencoder(light_curves, autoencoder, patience=10, verbose = False)
+	latent_repr =  encoder.predict(light_curves)
+   
+	plt.figure()
+	plt.scatter(latent_repr[:, 0],latent_repr[:, 1], color=colors, s = 5)
+	plt.show()
 
