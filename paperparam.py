@@ -1,12 +1,10 @@
 import datetime, os, sys, argparse, random, pathlib, time
-from progressbar import *
+
+from tqdm import tqdm, trange
 import numpy as np
 
-import keras
-from keras.models import Sequential, Model, load_model
-from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten, Input, Concatenate, GlobalMaxPool1D
-
-import tensorflow as tf
+from keras.models import Model, load_model
+from keras.callbacks import ModelCheckpoint, TensorBoard
 
 import sklearn
 from sklearn.metrics import confusion_matrix, roc_auc_score
@@ -40,10 +38,43 @@ class cd:
     def __exit__(self, etype, value, traceback):
         os.chdir(self.savedPath)
 
-# -----------------------------------------------------------------------------------
 
-widgets = ['Working! ', Percentage(), ' ', Bar(marker='#',left='[',right=']'),
-           ' ', ETA(), ' ', FileTransferSpeed()]
+def disk_folder(path, *superpath, overwrite=False, home=None):
+    """
+    Very flimsy folder maker, works within scope needed for this project
+    
+    If folder needs to be within another folder, include superpath as the one-layer-up folder
+    """
+
+    if home == None:
+        savePath = os.getcwd()
+    else:
+        savePath = home
+
+    os.chdir(savePath)
+
+    sup_indx = 0
+    max_len = len(superpath)
+
+    if max_len > 0:
+        while sup_indx <= max_len:
+            os.chdir(superpath[sup_indx])
+            sup_indx += 1
+
+    if not os.path.exists(path) or not overwrite:
+        time.sleep(3)
+        os.makedirs(path)
+    
+    os.chdir(savePath)
+
+
+    printer = ''
+    for sppath in superpath:
+        printer += "/" + str(sppath)
+    
+    printer += "/" + str(path)
+
+    print("Made folder {0} at {1}".format(path, printer))
 
 # -----------------------------------------------------------------------------------
 
@@ -64,8 +95,8 @@ overwrite = False
 # FOR PRECISION AND RECALL
 
 # points for thresholds graphing
-points_thresh = 10
-thresh = np.linspace(0.4, 0.9, points_thresh)
+points_thresh = 100
+thresh = np.linspace(0.2, 0.9, points_thresh)
 
 
 # -----------------------------------------------------------------------------------
@@ -74,76 +105,72 @@ thresh = np.linspace(0.4, 0.9, points_thresh)
 
 # external folder
 outpdir = 'outputs_' + datatype + '_' + modl.__name__
-
 # make the external folder
-if not os.path.exists(outpdir) or overwrite:
-    time.sleep(3)
-    os.makedirs(outpdir)
-
+disk_folder(outpdir, (), overwrite=overwrite)
 
 datadir = 'generated_data'
 
-with cd(outpdir):
-    if not os.path.exists(datadir):
-        time.sleep(3)
-        os.makedirs(datadir)
+disk_folder(datadir, (outpdir), overwrite=overwrite)
 
 
-with cd(outpdir):
-    with cd(datadir):
-        if datatype == 'here':
+# 'here' params ----------------------------------------------------------------------
+numbtime = 20000 # could maybe need to be 2001 to meet paper's specs
 
-            numbtime = 20000 # could maybe need to be 2001 to meet paper's specs
+# find bin numb to get both 2001 and 201 with (we don't care about) remainders!
 
-            # find bin numb to get both 2001 and 201 with (we don't care about) remainders!
+dept = 0.998
+nois = 3e-3
+numbdata = int(2e4)
+fracplan = 0.35
 
-            dept = 0.998
-            nois = 3e-3
-            numbdata = int(2e4)
-            fracplan = 0.35
+numbplan = int(numbdata * fracplan)
+numbnois = numbdata - numbplan
 
-            numbplan = int(numbdata * fracplan)
-            numbnois = numbdata - numbplan
+indxtime = np.arange(numbtime)
+indxdata = np.arange(numbdata)
 
-            indxtime = np.arange(numbtime)
-            indxdata = np.arange(numbdata)
+numbdatatest = int(fractest * numbdata)
 
-            numbdatatest = int(fractest * numbdata)
-
-            # name the files accordingly
-            path_namer_dict = {'numbtime': numbtime, 'dept' : dept, 'nois' : nois, 'numbdata' : numbdata, 'fracplan':fracplan}
-            path_namer_str = ""
-            for key, value in path_namer_dict.items():
-                paired = str(key) + str(value) + '_'
-                path_namer_str += paired
+# name the files accordingly
+path_namer_dict = {'numbtime': numbtime, 'dept' : dept, 'nois' : nois, 'numbdata' : numbdata, 'fracplan':fracplan}
+path_namer_str = ""
+for key, value in path_namer_dict.items():
+    paired = str(key) + str(value) + '_'
+    path_namer_str += paired
 
 
-            datafile = path_namer_str+'_{}.npz'.format(datatype)
-
-            if not os.path.exists(datafile):
-
-                inptraww, outp, peri = retr_datamock(numbplan=numbplan,\
-                        numbnois=numbnois, numbtime=numbtime, dept=dept, nois=nois)
-
-                np.savez(datafile, inptraww, outp, peri)
+datafile = path_namer_str+'_{}.npz'.format(datatype)
+# ------------------------------------------------------------------------------------
 
 
-        elif datatype == 'ete6':
-            pass
+def load_start():
+    with cd(outpdir):
+        with cd(datadir):
+            if datatype == 'here':
+
+                if not os.path.exists(datafile) and not overwrite:
+
+                    inptraww, outp, peri = retr_datamock(numbplan=numbplan,\
+                            numbnois=numbnois, numbtime=numbtime, dept=dept, nois=nois)
+
+                    np.savez(datafile, inptraww, outp, peri)
 
 
-        elif datatype == 'tess':
-            pass
+            elif datatype == 'ete6':
+                pass
+
+
+            elif datatype == 'tess':
+                pass
 
  
-
-
 # -----------------------------------------------------------------------------------
 
 # BINNING
 
-# params
-paperloclinpt = 200      # input shape from paper [local val]
+
+# params --------------------------------------------------------
+paperloclinpt = 200     # input shape from paper [local val]
 papergloblinpt = 2000   # input shape from paper
 
 loclbin = int(numbtime/paperloclinpt)
@@ -154,7 +181,7 @@ globaltimebins = papergloblinpt
 
 localbinsindx = np.arange(localtimebins)
 globalbinsindx = np.arange(globaltimebins)
-
+# ---------------------------------------------------------------
 
 # saving data
 
@@ -170,19 +197,14 @@ inptb4path = 'inpt_'+path_namer_str+'.pdf'
 binndir = 'binned_data'
 binnimgdir = 'lightcurves'
 
-with cd(outpdir):
-    if not os.path.exists(binndir):
-        time.sleep(3)
-        os.makedirs(binndir)
 
-    with cd(binndir):
-        if not os.path.exists(binnimgdir):
-            time.sleep(3)
-            os.makedirs(binnimgdir)
-
+disk_folder(binndir, (outpdir), overwrite=overwrite)
+disk_folder(binnimgdir, (outpdir, binndir), overwrite=overwrite)
 
 # run
 def gen_binned():
+
+
     with cd(outpdir):
         with cd(datadir):
 
@@ -209,11 +231,10 @@ def gen_binned():
             print("\nGenerating binned")
 
             # further let the runner know what is happening, by running a progress bar :))
-            pbar = ProgressBar(widgets=widgets, maxval=len(indxdata))
-            pbar.start()
+            # using tqdm as progress bar!
 
             # for each curve in the inpt space
-            for k in indxdata:
+            for k in tqdm(indxdata):
 
                 # for datatype 'here' the period of the planets are found in the indeces k < numbplan (the planets are the first numbplan# of light curves)
                 if datatype == 'here':
@@ -292,9 +313,6 @@ def gen_binned():
                         plt.savefig('{}'.format(k) + inptb4path)
                         plt.close()
 
-                pbar.update(k)
-
-            pbar.finish()
 
             # save the data generated
             np.savetxt(pathsavefoldLocl, inptloclfold)
@@ -312,18 +330,13 @@ def gen_binned():
 
 inptdir = 'input_images'
 
-with cd(outpdir):
-    if not os.path.exists(inptdir):
-        time.sleep(3)
-        os.makedirs(inptdir)
+disk_folder(inptdir, (outpdir), overwrite=overwrite)
+
 
 # graphs inputs, and transformed inputs
-def inpt_before_train():
+def inpt_before_train(num_graphs=10, save=True, overwrite=True):
     """
     Takes the binned data from gen_binned and makes input graphs
-
-    Currently hard-coded to make exactly 10
-
     Shows both the local and global view
     """
 
@@ -335,22 +348,16 @@ def inpt_before_train():
             inptG = np.loadtxt(pathsavefoldGlob)
             outp  = np.loadtxt(pathsavefoldoutp)
  
-        # gives just 10 plots
-        indexer = int(len(indxdata)/10)
+        # gives just num_graphs # of plots
+        indexer = int(len(indxdata)/num_graphs)
         indexes = indxdata[0::indexer]
 
         # let the user know what is happening :)
         print("\nMaking input graphs!")
 
         # let the user know with a progressbar :)
-        pbar = ProgressBar(widgets=widgets, maxval=len(indexes))
-        pbar.start()  
-
-        # for the progressbar
-        pbarcounter = 0
-
         # for just the 10 specified plots:
-        for k in indexes:
+        for k in tqdm(indexes):
 
             # red is relevant (has an output that signifies a planet is present)
             if outp[k] == 1:
@@ -374,7 +381,7 @@ def inpt_before_train():
             # make the 2 subplots
             fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6))
 
-            # plot 1 is the local plot, plot 2 is the global
+            # plot 0 is the local plot, plot 1 is the global
             axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
             axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
             
@@ -388,19 +395,11 @@ def inpt_before_train():
             axis[1].set_ylabel('Binned Flux')
 
 
-
-
             plt.tight_layout()
 
             with cd(inptdir):
-                plt.savefig(textbox+ '{}_'.format(k) + inptb4path)
+                plt.savefig(textbox+ '_{}_'.format(k) + inptb4path)
                 
-
-            
-            pbar.update(pbarcounter)
-            pbarcounter += 1
-
-        pbar.finish()
 
     return None    
 
@@ -414,17 +413,16 @@ pathsaveconf = 'conf_' + path_namer_str + '.npy'
 
 
 matrdir = 'matrices'
-modldir = 'models'
+# modldir = 'models'
+# tb = 'tb_logs'
 
-with cd(outpdir):
-    if not os.path.exists(matrdir):
-        time.sleep(3)
-        os.makedirs(matrdir)
+disk_folder(matrdir, (outpdir), overwrite=overwrite)
+# disk_folder(modldir, (outpdir), overwrite=overwrite)
+# disk_folder(tb, (outpdir, modldir), overwrite=overwrite)
 
-    if not os.path.exists(modldir):
-        time.sleep(3)
-        os.makedirs(modldir)
-
+checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=True, mode='max')
+tens_board = TensorBoard(log_dir='logs/{}'.format(time()))
+callbacks_list = [checkpoint, tens_board]
 
 # THIS IS THE BOTTLENECK
 def gen_metr():
@@ -450,14 +448,15 @@ def gen_metr():
             outp  = np.loadtxt(pathsavefoldoutp)
 
 
-        with cd(modldir):
-            # initialize model
-            try:
-                model = load_model(modlpath)
-                print("Loading previous model")
-            except:
-                model = modl()
-                print("New model")
+        # with cd(modldir):
+        # initialize model
+        model = modl()
+
+        try:
+            model.load_weights(modlpath)
+            print("Loading previous model's weights")
+        except:
+            print("New model")
 
 
         # initialize the matrix holding all metric values
@@ -494,13 +493,13 @@ def gen_metr():
         print("\nGenerating Metric Matrix")
 
         # run through epochs
-        for epoc in indxepoc:
+        for epoc in tqdm(indxepoc):
             
-            hist = model.fit([inptL1, inptG1], outp1, epochs=1, validation_split=fractest, verbose=1)
+            hist = model.fit([inptL1, inptG1], outp1, epochs=1, validation_split=fractest, verbose=1, callbacks=callbacks_list)
 
             # NOTICE THAT THERE IS NO WAY TO TELL WHICH EPOCH YOU ARE ON IF LOADING FROM FILE
-            with cd(modldir):
-                model.save(modlpath)
+            # with cd(modldir):
+                # model.save(modlpath)
 
             # train and then test 
             for i in range(2):
@@ -528,11 +527,8 @@ def gen_metr():
 
                     print('test')
 
-                pbar = ProgressBar(widgets=widgets, maxval=len(thresh))
-                pbar.start()
-
                 # only now, within the testing parameters, we test against a range of threshold values
-                for threshold in range(len(thresh)):
+                for threshold in trange(len(thresh)):
 
                     outppred = (model.predict([inptL, inptG]) > thresh[threshold]).astype(int)
 
@@ -564,16 +560,13 @@ def gen_metr():
                     if float(trpo+flpo+trne) != 0:
                         metr[epoc, threshold, 1] = float(trpo + trne)/(trpo + flpo + trne) # accuracy
                     else:
-                        metr[epoc, threshold, 1] = np.nan
+                        metr[epoc, threshold, 1] = 0
 
                     if float(trpo + flne) > 0:
                         metr[epoc, threshold, 2] = trpo / float(trpo + flne) # recall
                     else:
                         pass
                     
-                    pbar.update(threshold)
-
-                pbar.finish()
 
             with cd(matrdir):
                 
@@ -603,10 +596,8 @@ def gen_metr():
 
 pvrdir = 'Precision_vs_Recall'
 
-with cd(outpdir):
-    if not os.path.exists(pvrdir):
-        time.sleep(3)
-        os.makedirs(pvrdir)
+disk_folder(pvrdir, (outpdir), overwrite=overwrite)
+
 
 # graphs prec vs recal 
 def graph_PvR():
@@ -619,8 +610,8 @@ def graph_PvR():
             inptG = np.loadtxt(pathsavefoldGlob)
             outp  = np.loadtxt(pathsavefoldoutp)
 
-        with cd(modldir):
-            model = load_model(modlpath)
+        model = modl()
+        model.load_weights(modlpath)
 
         with cd(matrdir):
             metr = np.load(pathsavemetr)
@@ -662,12 +653,9 @@ def graph_PvR():
                 colr = 'g'
 
 
-            print("Epoch: {0}, ".format(epoc) + typstr)
+            print("Epoch: {0}, ".format(epoc) + typstr) 
 
-            pbar = ProgressBar(widgets=widgets, maxval=len(thresh))
-            pbar.start()   
-
-            for threshold in range(len(thresh)):
+            for threshold in trange(len(thresh)):
                 # this is wrong ***
                 x, y = metr[epoc, threshold, i, 2], metr[epoc, threshold, i, 0]
 
@@ -676,8 +664,6 @@ def graph_PvR():
                     y_points.append(y) # precision
                     axis.plot(x, y, marker='o', ls='', markersize=3, alpha=0.6, color=colr)
 
-                pbar.update(threshold)
-            pbar.finish()
 
     
     axis.axhline(1, alpha=.4)
@@ -702,10 +688,7 @@ def graph_PvR():
 
 confdir = 'Confusion_Matrix'
 
-with cd(outpdir):
-    if not os.path.exists(confdir):
-        time.sleep(3)
-        os.makedirs(confdir)
+disk_folder(confdir, (outpdir), overwrite=overwrite)
 
 # graphs conf matrix per epoch
 # remake to just take conf_matr_vals
@@ -725,7 +708,7 @@ def graph_conf():
     # constant threshold needed to get just one set of values\ unneeded?
     const_thresh = 0.7
 
-    for epoch in range(len(matrconf)):
+    for epoch in trange(len(matrconf)):
 
         trne = matrconf[epoch][0]
         flpo = matrconf[epoch][1]
@@ -763,13 +746,25 @@ def graph_conf():
             plt.close()
 
 # -----------------------------------------------------------------------------------
+def make_folders():
+    # put all the folder stuff here, make global, and move this function to the top
+    pass
+
+def main():
+
+    # include logic about seeing if files are loaded, if overwritting needs to happen
+    # where to pick up, whatnot
+    load_start()
+    gen_binned()
+    inpt_before_train()
+    gen_metr()
+    graph_PvR()
+    graph_conf()
+
+
 
 if __name__ == "__main__":
-    # gen_binned()
-    # inpt_before_train()
-    # gen_metr()
-    # graph_PvR()
-    # graph_conf()
+    main()
 
     with cd(outpdir):
         with cd(matrdir):
