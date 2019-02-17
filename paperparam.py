@@ -421,7 +421,7 @@ disk_folder(matrdir, (outpdir), overwrite=overwrite)
 # disk_folder(tb, (outpdir, modldir), overwrite=overwrite)
 
 checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=True, mode='max')
-tens_board = TensorBoard(log_dir='logs/{}'.format(time()))
+tens_board = TensorBoard(log_dir='logs/{}'.format(time.time()))
 callbacks_list = [checkpoint, tens_board]
 
 # THIS IS THE BOTTLENECK
