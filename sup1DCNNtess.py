@@ -45,44 +45,6 @@ class cd:
         os.chdir(self.savedPath)
 
 
-def disk_folder(path, *superpath, overwrite=False, home='EXOP_DATA_PATH'):
-    """
-    Very flimsy folder maker, works within scope needed for this project
-    
-    If folder needs to be within another folder, include superpath as the one-layer-up folder
-    """
-
-    if home == None:
-        savePath = os.getcwd()
-    else:
-        savePath = os.environ[home]
-
-    os.chdir(savePath)
-
-    sup_indx = 0
-    max_len = len(superpath)
-
-    if max_len > 0:
-        while sup_indx <= max_len:
-            os.chdir(superpath[sup_indx])
-            sup_indx += 1
-
-    if not os.path.exists(path) or overwrite:
-        time.sleep(3)
-        os.makedirs(path)
-    
-    os.chdir(savePath)
-
-
-    printer = ''
-    for sppath in superpath:
-        printer += "/" + str(sppath)
-    
-    printer += "/" + str(path)
-
-    print("Made folder {0} at {1}".format(path, printer))
-
-
 # -----------------------------------------------------------------------------------
 
 
@@ -244,7 +206,7 @@ def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True
 
 
 
-def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, disp=True):
+def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, init_epoch=0, disp=True):
 
 
     inptL1 = locl[:,:,None]
@@ -252,10 +214,10 @@ def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, disp=Tru
     outp1 = labls
 
 
-    hist = model.fit([inptL1, inptG1], outp1, epochs=epochs, validation_split=fractest, verbose=1, callbacks=callbacks_list)
+    hist = model.fit([inptL1, inptG1], outp1, epochs=epochs, validation_split=fractest, verbose=1, callbacks=callbacks_list, initial_epoch=init_epoch)
     
     if disp:
-        print(hist.summary())
+        print(hist.history())
 
 
 
@@ -300,7 +262,7 @@ def matr_2inpt(model, locl, glob, labls):
     conf_matr_vals = np.zeros((numbepoc, len(thresh), 4, 2))
 
 
-    for epoc in trange(indxepoc):
+    for epoc in tqdm(indxepoc):
 
         # train and then test 
         for i in trange(2):
@@ -392,6 +354,141 @@ def matr_2inpt(model, locl, glob, labls):
 # -----------------------------------------------------------------------------------
 
 
+# graphs prec vs recal 
+def graph_PvR(model, locl, glob, labl, metr):
+
+
+    numbdatatest = fractest * len(locl)
+
+    # TEMP: ONLY USING THE TEST DATA
+    inptL = locl[:numbdatatest,:,None]
+    inptG = glob[:numbdatatest,:,None]
+    outp = labl
+
+    y_pred = model.predict([inptL, inptG])
+
+    y_real = outp[:numbdatatest]
+
+    try:
+        auc = roc_auc_score(y_real, y_pred)
+    except:
+        print('y_pred is bad :(')
+        auc = 0.
+
+    textbox = '\n'.join((
+        # r'$\mathrm{Signal:Noise}=%.2f$' % (dept/nois, ),
+        # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
+        r'$\mathrm{AUC}=%.8f$' % (auc, ))) # ,
+        # r'$\mathrm{Depth}=%.4f$' % (dept, )))
+    
+
+    x_points = []
+    y_points = []
+
+    fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
+
+
+    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(model.__name__))) if os.path.isfile(name)])
+    indxepoc = np.arange(numbepoc)
+
+
+    for epoc in tqdm(indxepoc):
+        for i in range(2):
+            
+            if i == 0:
+                typstr = 'test'
+                colr = 'm'
+
+            else:
+                typstr = 'train'
+                colr = 'g'
+
+
+            print("Epoch: {0}, ".format(epoc) + typstr) 
+
+            for threshold in trange(len(thresh)):
+                # this is wrong ***
+                x, y = metr[epoc, threshold, i, 2], metr[epoc, threshold, i, 0]
+
+                if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
+                    x_points.append(x) # recall
+                    y_points.append(y) # precision
+                    axis.plot(x, y, marker='o', ls='', markersize=3, alpha=0.6, color=colr)
+
+
+    
+    axis.axhline(1, alpha=.4)
+    axis.axvline(1, alpha=.4)
+    props = dict(boxstyle='round', alpha=0.4)
+    axis.text(0.05, 0.25, textbox, transform=axis.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+    plt.tight_layout()
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title('Precision v Recall')
+
+
+
+    plt.savefig(os.environ['EXOP_DATA_PATH'] + '/tess/plot/PvR/' + '{0}.pdf'.format(model.__name__))
+    plt.close()
+    
+    return None
+
+
+# -----------------------------------------------------------------------------------
+
+
+def graph_conf(model, locl, glob, labl, conf):
+
+
+    fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
+
+    print("Graphing inpt based on conf_matr") 
+    
+    shape = 'v'
+
+    # constant threshold needed to get just one set of values\ unneeded?
+    const_thresh = 0.7
+
+    for epoch in trange(len(conf)):
+
+        trne = conf[epoch][0]
+        flpo = conf[epoch][1]
+        flne = conf[epoch][0]
+        trpo = conf[epoch][1]
+
+        
+        axis[0,0].plot(epoch, trne, marker=shape, ls='', markersize=3, alpha=0.3, color='g')
+        axis[0,1].plot(epoch, flpo, marker=shape, ls='', markersize=3, alpha=0.3, color='r')
+        axis[1,0].plot(epoch, flne, marker=shape, ls='', markersize=3, alpha=0.3, color='#FFA500') # this is the color orange
+        axis[1,1].plot(epoch, trpo, marker=shape, ls='', markersize=3, alpha=0.3, color='b')
+
+  
+    axis[0,0].set_title('True Negative')
+    axis[0,0].set_xlabel('Epoch')
+    axis[0,0].set_ylabel('True Negative')
+
+    axis[0,1].set_title('False Positive')
+    axis[0,1].set_xlabel('Epoch')
+    axis[0,1].set_ylabel('False Positive')
+
+    axis[1,0].set_title('False Negative')
+    axis[1,0].set_xlabel('Epoch')
+    axis[1,0].set_ylabel('False Negative')
+
+    axis[1,1].set_title('True Positive')
+    axis[1,1].set_xlabel('Epoch')
+    axis[1,1].set_ylabel('True Positive')
+
+    plt.tight_layout()
+
+
+    plt.savefig(os.environ['EXOP_DATA_PATH'] + '/tess/plot/Conf/' + 'inptspace_confmatr.pdf')
+    plt.close()
+
+
+# -----------------------------------------------------------------------------------
+
+
 def main():
 
     # data pull
@@ -431,17 +528,20 @@ def main():
         print("Fresh, new model")
 
 
-    
-    modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{}'.format(epoch + prevMax) + '.h5'
+    # need to fix this
+    modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
     checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
     tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
     callbacks_list = [checkpoint, tens_board]  
 
 
     # need a conditional to check the shape of the model -- if two-input: use this function
-    train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list)
+    train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list, init_epoch=prevMax)
 
     metr, conf = matr_2inpt(model, loclF, globF, labels)
+
+    graph_conf(model, loclF, globF, labels, conf)
+    graph_PvR(model, loclF, globF, labels, metr)
 
 
 # -----------------------------------------------------------------------------------
