@@ -27,11 +27,6 @@ from models import exonet, reduced
 
 import pickle
 
-"""
-Need to figure out how to generate global and local views... then should be able to run...
-"""
-
-
 # -----------------------------------------------------------------------------------
 
 
@@ -135,7 +130,6 @@ globalbinsindx = np.arange(globaltimebins)
 
 
 # locl and glob binning
-# TEMP NEED TO FIX _TIME INPUT 
 def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=True):
 
     pathsave = os.environ['EXOP_DATA_PATH'] + '/tess/glob_locl.pickle'
@@ -165,7 +159,7 @@ def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=
             inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).bin(loclbin).flux # BIN hard coded (fix soon)
             inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).bin(globbin).flux # BIN hard coded
         
-        listdata = [inptglobfold, inptloclfold]
+        listdata = [inptloclfold, inptglobfold]
 
         print ('Writing to %s...' % pathsave)
         objtfile = open(pathsave, 'wb')
@@ -222,8 +216,8 @@ def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True
 
         # line for local, line for global [line is used liberally, just a collection of x and y points]
         # k indexes in for a SINGLE light curve
-        localline = (localbinsindx, locl[k, :])
-        globalline = (globalbinsindx, glob[k, :])
+        localline = (np.arange(len(locl[k,:])), locl[k, :])
+        globalline = (np.arange(len(glob[k,:])), glob[k, :])
 
         # make the 2 subplots
         fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6))
@@ -259,26 +253,22 @@ def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True
 
 # -----------------------------------------------------------------------------------
 
-modlpath = '{}_'.format(str(modl.__name__)) + 'weights' + '.h5'
+modlpath = 'tess/models/{}_'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
 
 pathsavemetr = 'metr_' + '{}_'.format(str(modl.__name__)) + '.npy'
 pathsaveconf = 'conf_' + '{}_'.format(str(modl.__name__)) + '.npy'
 
 
 matrdir = 'matrices'
-# modldir = 'models'
-# tb = 'tb_logs'
 
 disk_folder(matrdir, (), overwrite=overwrite)
-# disk_folder(modldir, (outpdir), overwrite=overwrite)
-# disk_folder(tb, (outpdir, modldir), overwrite=overwrite)
 
-checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=True, mode='max')
+checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
 tens_board = TensorBoard(log_dir='logs/{}'.format(time.time()))
 callbacks_list = [checkpoint, tens_board]
 
 # THIS IS THE BOTTLENECK
-def gen_metr(locl, glob, labl, numbdatatest):
+def gen_metr(model, epochs, locl, glob, labl, numbdatatest):
     """
     This is the BOTTLENECK of this pipeline
 
@@ -299,15 +289,6 @@ def gen_metr(locl, glob, labl, numbdatatest):
     outp  = labl
 
 
-    # with cd(modldir):
-    # initialize model
-    model = modl()
-
-    try:
-        model.load_weights(modlpath)
-        print("Loading previous model's weights")
-    except:
-        print("New model")
 
 
     # initialize the matrix holding all metric values
@@ -448,21 +429,52 @@ def gen_metr(locl, glob, labl, numbdatatest):
 
 def main():
 
+    # data pull
     phases, fluxes, labels, _, _, _ = retr_datatess(True, boolplot=False)
 
+    # data formatting for network
     nrow, ncol = fluxes.shape
     light_curves = np.reshape(fluxes, (nrow, ncol, 1))
 
     # colors for graphs
     colors =  ["r" if x else "b" for x in labels]
 
+
+    # local and global
     # this needs to get reformatted badly
-    loclF, globF = gen_binned(fluxes, phases)
+    loclF, globF = gen_binned(fluxes, phases, phases)
+
 
     # sample relevance graphs
     inpt_before_train(loclF, globF, labels, save=False)
 
+    # for metr
     numbdatatest = fractest * len(fluxes)
+
+
+
+    weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/') if weights.startswith(modl.__name__)]
+
+    last_epoch = max(weights_list)
+
+    # initialize model
+    model = modl()
+
+    try:
+        model.load_weights(last_epoch)
+        print("Loading previous model's weights")
+    except:
+        print("Fresh, new model")
+
+
+    
+
+
+
+
+    # bottleneck
+    gen_metr(model, 20, loclF, globF, labels, numbdatatest)
+
 
 
 
