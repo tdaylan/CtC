@@ -67,7 +67,7 @@ def disk_folder(path, *superpath, overwrite=False, home='EXOP_DATA_PATH'):
             os.chdir(superpath[sup_indx])
             sup_indx += 1
 
-    if not os.path.exists(path) or not overwrite:
+    if not os.path.exists(path) or overwrite:
         time.sleep(3)
         os.makedirs(path)
     
@@ -132,7 +132,7 @@ def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=
     loclbin = int(numbtime/loclinptbins)
     globbin = int(numbtime/globinptbins)
 
-    if not os.path.exists(pathsave):
+    if not os.path.exists(pathsave) or overwrite:
         # holder np arrays
         inptloclfold = np.empty((numbdata, loclinptbins))
         inptglobfold = np.empty((numbdata, globinptbins))
@@ -373,7 +373,7 @@ def matr_2inpt(model, locl, glob, labls):
     listdata = [metr, conf_matr_vals]
 
 
-    if 
+    if not os.path.exists(pathsavematr) or overwrite:
         print ('Writing to %s...' % pathsavematr)
         objtfile = open(pathsavematr, 'wb')
         pickle.dump(listdata, objtfile, protocol=pickle.HIGHEST_PROTOCOL)
