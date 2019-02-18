@@ -25,6 +25,12 @@ from exopmain import retr_datamock, retr_datatess
 
 from models import exonet, reduced
 
+import pickle
+
+"""
+Need to figure out how to generate global and local views... then should be able to run...
+"""
+
 
 # -----------------------------------------------------------------------------------
 
