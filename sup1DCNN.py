@@ -42,56 +42,6 @@ write relevant vs irrelevant for the input curves
 
 write tmag and rp and period and transit depth and src in a text box
 
-SRC********* need to keep the two seperate
-
-
-FLATTEN*****
-    need to mask the transit before flattening
-    this requires knowing where the transit is!
-    look for examples in lightkurve
-
-    Tansu's impression:
-        want get the period (read from one of the columns of the csv)
-        use that period to mask the transit
-        HOW TO DO THAT: 
-            no immediate answer on lightkurve...
-
-
-            try this instead of flattening:
-
-
-            detrending with masking
-            to do the detrending itself
-            scipt.inerpolate.LSQUnivariateSpline(x,y,t)
-                x: time
-                y: relative flux
-                t: linspace(min(x), max(x) [excluding these values], of length 10-15)
-
-                returns fit to these points
-
-            subtract lightcurve - LSQFit
-
-            ** or **
-
-            to get the mask, without the phase information:
-
-                replace the 'transit location' in the mask with NaNs so we can subtract this
-
-
-using datavalidation objects, so we cannot just read the lightcurve file in lightkurve
-
-so we just send the flux and time and pass them to the lightkurve arguments as we did before 
-
-download the datavalidationfiles using shell script
-within for loop:
-    pick out file names using os.listdir 
-    fnmatch to filter out file names
-
-    ^^ set to path name
-
-    
-
-path = 
 """
 
 
