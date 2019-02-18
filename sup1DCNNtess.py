@@ -26,6 +26,7 @@ from exopmain import retr_datamock, retr_datatess
 from models import exonet, reduced
 
 import pickle
+import re
 
 # -----------------------------------------------------------------------------------
 
@@ -110,20 +111,8 @@ thresh = np.linspace(0.2, 0.9, points_thresh)
 # -----------------------------------------------------------------------------------
 
 
-# params for global vs local binning
-"""
-paperloclinpt = 200     # input shape from paper [local val]
-papergloblinpt = 2000   # input shape from paper
+# hyperparams will go here for model optimization
 
-loclbin = int(numbtime/paperloclinpt)
-globbin = int(numbtime/papergloblinpt)
-
-localtimebins = paperloclinpt
-globaltimebins = papergloblinpt
-
-localbinsindx = np.arange(localtimebins)
-globalbinsindx = np.arange(globaltimebins)
-"""
 
 
 # -----------------------------------------------------------------------------------
@@ -253,58 +242,32 @@ def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True
 
 # -----------------------------------------------------------------------------------
 
-modlpath = 'tess/models/{}_'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
-
-pathsavemetr = 'metr_' + '{}_'.format(str(modl.__name__)) + '.npy'
-pathsaveconf = 'conf_' + '{}_'.format(str(modl.__name__)) + '.npy'
 
 
-matrdir = 'matrices'
-
-disk_folder(matrdir, (), overwrite=overwrite)
-
-checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
-tens_board = TensorBoard(log_dir='logs/{}'.format(time.time()))
-callbacks_list = [checkpoint, tens_board]
-
-# THIS IS THE BOTTLENECK
-def gen_metr(model, epochs, locl, glob, labl, numbdatatest):
-    """
-    This is the BOTTLENECK of this pipeline
-
-    metr: prec, acc, recal; per epoch and threshold
-    conf_matr_vals: trne, trpo, flne, flpo; per epoch and threshold
-
-    the time is largely reliant on how many epochs are in indxepoc, and the size(or length) of the input data
-    input data needs to be high enough to not overtrain over a small set, but not so big that the training never ends
-
-    IDEALLY: there would be intermittent saving or updating, and the ability to start back up from where left off to
-    use any of the data before it is completely finished
-    """
+def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, disp=True):
 
 
-    # load the files
-    inptL = locl
-    inptG = glob
-    outp  = labl
+    inptL1 = locl[:,:,None]
+    inptG1 = glob[:,:,None]
+    outp1 = labls
+
+
+    hist = model.fit([inptL1, inptG1], outp1, epochs=epochs, validation_split=fractest, verbose=1, callbacks=callbacks_list)
+    
+    if disp:
+        print(hist.summary())
 
 
 
-
-    # initialize the matrix holding all metric values
-    # INDEX 1: which epoch
-    # INDEX 2: which threshold value is being tested against
-    # INDEX 3: [IN THIS ORDER] precision, accuracy, recall (numerical values)
-    # INDEX 4: train [0] test [1]
-    metr = np.zeros((numbepoc, len(thresh), 3, 2)) - 1
+# -----------------------------------------------------------------------------------
 
 
-    # we also want the confusion matrices for later use
-    # INDEX 1: which epoch
-    # INDEX 2: which threshold value is being tested against
-    # INDEX 3: [IN THIS ORDER] trne, flpo, flne, trpo
-    # INDEX 4: train [0] test [1]
-    conf_matr_vals = np.zeros((numbepoc, len(thresh), 4, 2))
+# WILL NEED TO INCLUDE HYPERPARAMETERS HERE TO DIFFERENTIATE MATRICES
+pathsavematr = 'tess/matr/' + '{}'.format(str(modl.__name__)) + '.npy'
+
+def matr_2inpt(model, locl, glob, labls):
+    
+    numbdatatest = fractest * len(locl)
 
 
     # separate the training from the testing
@@ -314,24 +277,30 @@ def gen_metr(model, epochs, locl, glob, labl, numbdatatest):
     inpttestG = glob[:numbdatatest, :]
     inpttranG = glob[numbdatatest:, :]
 
-    outptest = labl[:numbdatatest]
-    outptran = labl[numbdatatest:]
+    outptest = labls[:numbdatatest]
+    outptran = labls[numbdatatest:]
 
-    inptL1 = locl[:,:,None]
-    inptG1 = glob[:,:,None]
-    outp1 = labl
 
-    # let our friends running this know what is happening
-    print("\nGenerating Metric Matrix")
+    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(model.__name__))) if os.path.isfile(name)])
+    indxepoc = np.arange(numbepoc)
 
-    # run through epochs
-    for epoc in tqdm(indxepoc):
-        
-        hist = model.fit([inptL1, inptG1], outp1, epochs=1, validation_split=fractest, verbose=1, callbacks=callbacks_list)
 
-        # NOTICE THAT THERE IS NO WAY TO TELL WHICH EPOCH YOU ARE ON IF LOADING FROM FILE
-        # with cd(modldir):
-            # model.save(modlpath)
+    # initialize the matrix holding all metric values
+    # INDEX 1: which epoch
+    # INDEX 2: which threshold value is being tested against
+    # INDEX 3: [IN THIS ORDER] precision, accuracy, recall (numerical values)
+    # INDEX 4: train [0] test [1]
+    metr = np.zeros((numbepoc, len(thresh), 3, 2)) - 1
+
+    # we also want the confusion matrices for later use
+    # INDEX 1: which epoch
+    # INDEX 2: which threshold value is being tested against
+    # INDEX 3: [IN THIS ORDER] trne, flpo, flne, trpo
+    # INDEX 4: train [0] test [1]
+    conf_matr_vals = np.zeros((numbepoc, len(thresh), 4, 2))
+
+
+    for epoc in trange(indxepoc):
 
         # train and then test 
         for i in trange(2):
@@ -358,6 +327,7 @@ def gen_metr(model, epochs, locl, glob, labl, numbdatatest):
                 inptG = inptG[:, :, None]
 
                 print('test')
+
 
             # only now, within the testing parameters, we test against a range of threshold values
             for threshold in trange(len(thresh)):
@@ -397,31 +367,26 @@ def gen_metr(model, epochs, locl, glob, labl, numbdatatest):
                 if float(trpo + flne) > 0:
                     metr[epoc, threshold, 2] = trpo / float(trpo + flne) # recall
                 else:
-                    pass
-                
-
-        with cd(matrdir):
-            
-            if os.path.exists(pathsavemetr):
-                dummy = np.load(pathsavemetr)
-                print(dummy)
-                concat = np.append(dummy, metr[epoc, :, :, :])
-                np.save(pathsavemetr, concat)
-                
-            else:
-                np.save(pathsavemetr, metr[epoc, :, :, :])
+                    pass 
 
 
-            if os.path.exists(pathsaveconf):
-                dummy = np.load(pathsaveconf)
-                concat = np.append(dummy, conf_matr_vals[epoc, :, :, :])
-                np.save(pathsaveconf, concat)
-                print(concat)
-            else:
-                np.save(pathsaveconf, conf_matr_vals[epoc, :, :, :])
-   
+    listdata = [metr, conf_matr_vals]
+
+
+    if 
+        print ('Writing to %s...' % pathsavematr)
+        objtfile = open(pathsavematr, 'wb')
+        pickle.dump(listdata, objtfile, protocol=pickle.HIGHEST_PROTOCOL)
+        objtfile.close()
+
+    else:
+        objtfile = open(pathsavematr, 'r')
+        print ('Reading from %s...' % pathsavematr)
+        listdata = pickle.load(objtfile)
+        objtfile.close()
     
-    return None
+
+    return listdata
 
 
 # -----------------------------------------------------------------------------------
@@ -432,13 +397,6 @@ def main():
     # data pull
     phases, fluxes, labels, _, _, _ = retr_datatess(True, boolplot=False)
 
-    # data formatting for network
-    nrow, ncol = fluxes.shape
-    light_curves = np.reshape(fluxes, (nrow, ncol, 1))
-
-    # colors for graphs
-    colors =  ["r" if x else "b" for x in labels]
-
 
     # local and global
     # this needs to get reformatted badly
@@ -448,34 +406,45 @@ def main():
     # sample relevance graphs
     inpt_before_train(loclF, globF, labels, save=False)
 
-    # for metr
-    numbdatatest = fractest * len(fluxes)
-
-
-
+    
+    # load the most previous weights from last training (could make this its own function)
     weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/') if weights.startswith(modl.__name__)]
 
     last_epoch = max(weights_list)
 
+    prevMax = 0
+
+
     # initialize model
     model = modl()
+    
 
     try:
         model.load_weights(last_epoch)
         print("Loading previous model's weights")
+
+        
+        regex = re.compile(r'\d+')
+        prevMax = int(regex.findall(last_epoch)[0])
+
     except:
         print("Fresh, new model")
 
 
     
+    modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{}'.format(epoch + prevMax) + '.h5'
+    checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
+    tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
+    callbacks_list = [checkpoint, tens_board]  
 
 
+    # need a conditional to check the shape of the model -- if two-input: use this function
+    train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list)
+
+    metr, conf = matr_2inpt(model, loclF, globF, labels)
 
 
-    # bottleneck
-    gen_metr(model, 20, loclF, globF, labels, numbdatatest)
-
-
+# -----------------------------------------------------------------------------------
 
 
 if __name__ == "__main__":
