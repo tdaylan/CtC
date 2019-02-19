@@ -82,12 +82,13 @@ thresh = np.linspace(0.2, 0.9, points_thresh)
 
 # locl and glob binning
 def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=True):
-
+    
     pathsave = os.environ['EXOP_DATA_PATH'] + '/tess/glob_locl.pickle'
 
     numbdata = len(raw_flux)
     indxdata = np.arange(numbdata)
 
+    #temp
     numbtime = len(_time)
     indxtime = np.arange(numbtime)
 
@@ -105,10 +106,9 @@ def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=
         # for each curve in the inpt space
         for k in tqdm(indxdata):
 
-            # BINNING ONLY WORKS FOR DATA THAT WE GENERATED :: MAKE MODULAR
-            # also took out .flatten() as it was adding extra >>1 values in the data
-            inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).bin(loclbin).flux # BIN hard coded (fix soon)
-            inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).bin(globbin).flux # BIN hard coded
+            #temp: time= is wrong
+            inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).flatten().bin(loclbin).flux # BIN hard coded (fix soon)
+            inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).flatten().bin(globbin).flux # BIN hard coded
         
         listdata = [inptloclfold, inptglobfold]
 
@@ -119,7 +119,7 @@ def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=
 
 
     else:
-        objtfile = open(pathsave, 'r')
+        objtfile = open(pathsave, 'rb')
         print ('Reading from %s...' % pathsave)
         listdata = pickle.load(objtfile)
         objtfile.close()
@@ -342,7 +342,7 @@ def matr_2inpt(model, locl, glob, labls):
         objtfile.close()
 
     else:
-        objtfile = open(pathsavematr, 'r')
+        objtfile = open(pathsavematr, 'rb')
         print ('Reading from %s...' % pathsavematr)
         listdata = pickle.load(objtfile)
         objtfile.close()
@@ -489,25 +489,29 @@ def graph_conf(model, locl, glob, labl, conf):
 # -----------------------------------------------------------------------------------
 
 
-def main():
+def main(run=True, graph=True):
 
+    
     # data pull
     phases, fluxes, labels, _, _, _ = retr_datatess(True, boolplot=False)
 
+    # print(len(phases[0]), '\n\n\n', len(fluxes[0]), '\n\n\n') #, len(period))
 
+    
     # local and global
     # this needs to get reformatted badly
     loclF, globF = gen_binned(fluxes, phases, phases)
 
-
-    # sample relevance graphs
-    inpt_before_train(loclF, globF, labels, save=False)
-
+    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/'):
+        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/models/')
     
     # load the most previous weights from last training (could make this its own function)
     weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/') if weights.startswith(modl.__name__)]
 
-    last_epoch = max(weights_list)
+    if len(weights_list) > 0:
+        last_epoch = max(weights_list)
+    else:
+        last_epoch = 0
 
     prevMax = 0
 
@@ -534,14 +538,19 @@ def main():
     tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
     callbacks_list = [checkpoint, tens_board]  
 
-
-    # need a conditional to check the shape of the model -- if two-input: use this function
-    train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list, init_epoch=prevMax)
+    if run:
+        # need a conditional to check the shape of the model -- if two-input: use this function
+        train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list, init_epoch=prevMax)
 
     metr, conf = matr_2inpt(model, loclF, globF, labels)
 
-    graph_conf(model, loclF, globF, labels, conf)
-    graph_PvR(model, loclF, globF, labels, metr)
+    if graph:
+        graph_conf(model, loclF, globF, labels, conf)
+        graph_PvR(model, loclF, globF, labels, metr)
+
+         # sample relevance graphs
+        inpt_before_train(loclF, globF, labels, save=False)
+    
 
 
 # -----------------------------------------------------------------------------------
