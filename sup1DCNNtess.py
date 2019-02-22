@@ -122,10 +122,12 @@ def gen_binned(fluxes, phases, loclinptbins=200, globinptbins=2000, save=True):
             newZero = takeClosest(phases[k],0)
             midpoint = np.where(phases[k] == newZero)[0][0]
             
-            inptloclfold[k,:] = fluxes[k][int(midpoint-loclinptbins/2):int(midpoint+loclinptbins/2)]
+            indices = range(int(midpoint-loclinptbins/2),int(midpoint+loclinptbins/2))
 
+
+            inptloclfold[k,:] = fluxes[k].take(indices)
             # print(fluxes[k][::int(fluxes[k]/globinptbins)][:globinptbins])
-            # inptglobfold[k,:] = fluxes[k][::int(fluxes[k]/globinptbins)][:globinptbins]
+            inptglobfold[k,:] = fluxes[k][::int(len(fluxes[k])/globinptbins)][:globinptbins]
 
 
         listdata = [inptloclfold, inptglobfold]
@@ -235,7 +237,7 @@ def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, init_epo
     hist = model.fit([inptL1, inptG1], outp1, epochs=epochs, validation_split=fractest, verbose=1, callbacks=callbacks_list, initial_epoch=init_epoch)
     
     if disp:
-        print(hist.history())
+        print(hist.history)
 
 
 
@@ -522,8 +524,14 @@ def main(run=True, graph=True):
     if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/'):
         os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/models/')
     
+    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}'.format(modl.__name__)):
+        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}'.format(modl.__name__))
+
     # load the most previous weights from last training (could make this its own function)
-    weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/') if weights.startswith(modl.__name__)]
+    try:
+        weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/') if weights.startswith(modl.__name__)]
+    except:
+        pass
 
     if len(weights_list) > 0:
         last_epoch = max(weights_list)
@@ -536,7 +544,7 @@ def main(run=True, graph=True):
     # initialize model
     model = modl()
     
-
+    # something here does not work, won't load prev model correctly :(
     try:
         model.load_weights(last_epoch)
         print("Loading previous model's weights")
