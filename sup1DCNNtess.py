@@ -247,7 +247,9 @@ def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, init_epo
 # WILL NEED TO INCLUDE HYPERPARAMETERS HERE TO DIFFERENTIATE MATRICES
 pathsavematr = 'tess/matr/' + '{}'.format(str(modl.__name__)) + '.npy'
 
-def matr_2inpt(model, locl, glob, labls):
+
+
+def matr_2inpt(model, locl, glob, labls, modl):
     
     numbdatatest = int(fractest * len(locl))
 
@@ -263,7 +265,7 @@ def matr_2inpt(model, locl, glob, labls):
     outptran = labls[numbdatatest:]
 
 
-    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(model.__name__))) if os.path.isfile(name)])
+    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(modl.__name__))) if os.path.isfile(name)])
     indxepoc = np.arange(numbepoc)
 
 
@@ -375,10 +377,10 @@ def matr_2inpt(model, locl, glob, labls):
 
 
 # graphs prec vs recal 
-def graph_PvR(model, locl, glob, labl, metr):
+def graph_PvR(model, locl, glob, labl, metr, modl):
 
 
-    numbdatatest = fractest * len(locl)
+    numbdatatest = int(fractest * len(locl))
 
     # TEMP: ONLY USING THE TEST DATA
     inptL = locl[:numbdatatest,:,None]
@@ -408,7 +410,7 @@ def graph_PvR(model, locl, glob, labl, metr):
     fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
 
 
-    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(model.__name__))) if os.path.isfile(name)])
+    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(modl.__name__))) if os.path.isfile(name)])
     indxepoc = np.arange(numbepoc)
 
 
@@ -448,7 +450,7 @@ def graph_PvR(model, locl, glob, labl, metr):
 
 
 
-    plt.savefig(os.environ['EXOP_DATA_PATH'] + '/tess/plot/PvR/' + '{0}.pdf'.format(model.__name__))
+    plt.savefig(os.environ['EXOP_DATA_PATH'] + '/tess/plot/PvR/' + '{0}.pdf'.format(modl.__name__))
     plt.close()
     
     return None
@@ -516,7 +518,6 @@ def main(run=True, graph=True):
 
     phases, fluxes, labels, _, _, _ = retr_datatess(True, boolplot=False)
 
-    print(len(fluxes[0][::2]))
     # local and global
     loclF, globF = gen_binned(fluxes, phases)
 
@@ -527,11 +528,18 @@ def main(run=True, graph=True):
     if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}'.format(modl.__name__)):
         os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}'.format(modl.__name__))
 
+    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/matr/{}'.format(modl.__name__)):
+        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/matr/{}'.format(modl.__name__))
+
+    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/plot/Conf/'):
+        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/plot/Conf/')
+
+    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/plot/PvR/'):
+        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/plot/PvR/')
+
     # load the most previous weights from last training (could make this its own function)
-    try:
-        weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/') if weights.startswith(modl.__name__)]
-    except:
-        pass
+    weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(modl.__name__))]
+    
 
     if len(weights_list) > 0:
         last_epoch = max(weights_list)
@@ -540,13 +548,12 @@ def main(run=True, graph=True):
 
     prevMax = 0
 
-
     # initialize model
     model = modl()
     
     # something here does not work, won't load prev model correctly :(
     try:
-        model.load_weights(last_epoch)
+        model.load_weights(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(modl.__name__) + last_epoch)
         print("Loading previous model's weights")
 
         
@@ -556,7 +563,7 @@ def main(run=True, graph=True):
     except:
         print("Fresh, new model")
 
-
+    
     modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
     checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
     tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
@@ -566,15 +573,15 @@ def main(run=True, graph=True):
         # need a conditional to check the shape of the model -- if two-input: use this function
         train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list, init_epoch=prevMax)
 
-    metr, conf = matr_2inpt(model, loclF, globF, labels)
+    metr, conf = matr_2inpt(model, loclF, globF, labels, modl)
 
     if graph:
         graph_conf(model, loclF, globF, labels, conf)
-        graph_PvR(model, loclF, globF, labels, metr)
+        graph_PvR(model, loclF, globF, labels, metr, modl)
 
          # sample relevance graphs
         inpt_before_train(loclF, globF, labels, save=False)
-
+    
 
 
 # -----------------------------------------------------------------------------------
