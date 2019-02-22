@@ -79,21 +79,34 @@ thresh = np.linspace(0.2, 0.9, points_thresh)
 
 # -----------------------------------------------------------------------------------
 
+from bisect import bisect_left
+
+def takeClosest(myList, myNumber):
+    """
+    Assumes myList is sorted. Returns closest value to myNumber.
+
+    If two numbers are equally close, return the smallest number.
+    """
+    pos = bisect_left(myList, myNumber)
+    if pos == 0:
+        return myList[0]
+    if pos == len(myList):
+        return myList[-1]
+    before = myList[pos - 1]
+    after = myList[pos]
+    if after - myNumber < myNumber - before:
+       return after
+    else:
+       return before
 
 # locl and glob binning
-def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=True):
+def gen_binned(fluxes, phases, loclinptbins=200, globinptbins=2000, save=True):
     
-    pathsave = os.environ['EXOP_DATA_PATH'] + '/tess/glob_locl.pickle'
+    pathsave = os.environ['EXOP_DATA_PATH'] + '/tess/locl_v_glob.pickle'
 
-    numbdata = len(raw_flux)
-    indxdata = np.arange(numbdata)
 
-    #temp
-    numbtime = len(_time)
-    indxtime = np.arange(numbtime)
+    numbdata = len(fluxes)
 
-    loclbin = int(numbtime/loclinptbins)
-    globbin = int(numbtime/globinptbins)
 
     if not os.path.exists(pathsave) or overwrite:
         # holder np arrays
@@ -104,12 +117,17 @@ def gen_binned(raw_flux, peri, _time, loclinptbins=200, globinptbins=2000, save=
         print("\nGenerating binned")
 
         # for each curve in the inpt space
-        for k in tqdm(indxdata):
+        for k in trange(numbdata):
 
-            #temp: time= is wrong
-            inptloclfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).flatten().bin(loclbin).flux # BIN hard coded (fix soon)
-            inptglobfold[k,:] = lightkurve.lightcurve.LightCurve(time=indxtime, flux=raw_flux[k,:], time_format='jd', time_scale='utc').fold(peri).flatten().bin(globbin).flux # BIN hard coded
-        
+            newZero = takeClosest(phases[k],0)
+            midpoint = np.where(phases[k] == newZero)[0][0]
+            
+            inptloclfold[k,:] = fluxes[k][int(midpoint-loclinptbins/2):int(midpoint+loclinptbins/2)]
+
+            # print(fluxes[k][::int(fluxes[k]/globinptbins)][:globinptbins])
+            # inptglobfold[k,:] = fluxes[k][::int(fluxes[k]/globinptbins)][:globinptbins]
+
+
         listdata = [inptloclfold, inptglobfold]
 
         print ('Writing to %s...' % pathsave)
@@ -493,14 +511,13 @@ def main(run=True, graph=True):
 
     
     # data pull
+
     phases, fluxes, labels, _, _, _ = retr_datatess(True, boolplot=False)
 
-    # print(len(phases[0]), '\n\n\n', len(fluxes[0]), '\n\n\n') #, len(period))
-
-    
+    print(len(fluxes[0][::2]))
     # local and global
-    # this needs to get reformatted badly
-    loclF, globF = gen_binned(fluxes, phases, phases)
+    loclF, globF = gen_binned(fluxes, phases)
+
 
     if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/'):
         os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/models/')
@@ -532,7 +549,6 @@ def main(run=True, graph=True):
         print("Fresh, new model")
 
 
-    # need to fix this
     modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
     checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
     tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
@@ -550,7 +566,7 @@ def main(run=True, graph=True):
 
          # sample relevance graphs
         inpt_before_train(loclF, globF, labels, save=False)
-    
+
 
 
 # -----------------------------------------------------------------------------------
