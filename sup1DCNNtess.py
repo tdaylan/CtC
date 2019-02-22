@@ -249,7 +249,7 @@ pathsavematr = 'tess/matr/' + '{}'.format(str(modl.__name__)) + '.npy'
 
 def matr_2inpt(model, locl, glob, labls):
     
-    numbdatatest = fractest * len(locl)
+    numbdatatest = int(fractest * len(locl))
 
 
     # separate the training from the testing
