@@ -625,7 +625,7 @@ def main(run=True, graph=True):
         graph_PvR(model, loclF, globF, labels, metr, modl)
 
          # sample relevance graphs
-        # inpt_before_train(loclF, globF, loclPhas, globPhas, legd, labels, save=False)
+        inpt_before_train(loclF, globF, loclPhas, globPhas, legd, labels, save=False)
     
 
 
