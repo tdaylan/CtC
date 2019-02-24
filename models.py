@@ -3,7 +3,7 @@ from keras.layers import Dense, Dropout, Conv1D, MaxPooling1D, Flatten, Input, C
 import tensorflow as tf
 import numpy as np
 import keras
-
+from keras import regularizers
 
 # FROM PAPER
 
@@ -18,8 +18,8 @@ import tensorflow as tf
 # models from "Scientific Domain Knowledge Improves Exoplanet Transit Classification with Deep Learning"
 
 # aka astronet
-def exonet():
-    loclinpt, globlinpt = 200, 2000 # hard coded for now
+def exonet(loclinpt, globlinpt, l1_param, l2_param):
+    
     padX = 'same'
     padY = 'valid'
 
@@ -96,8 +96,8 @@ def exonet():
     # modlfinl.summary()
     return modlfinl
 
-def reduced():
-    loclinpt, globlinpt = 200, 2000 # hard coded for now
+def reduced(loclinpt, globlinpt, l1_param, l2_param):
+    
     padX = 'same'
     padY = 'same'
 
@@ -147,10 +147,10 @@ def reduced():
     
     # ------------------------------------------------------------------------------
 
-    z = Dense(1, activation='relu')(z)
+    z = Dense(1, activation='relu', kernel_regularizer=regularizers.l2(l2_param), activity_regularizer=regularizers.l1(l1_param))(z)
 
     # ------------------------------------------------------------------------------
-    finllayr = Dense(1, activation='sigmoid', name='finl')(z)
+    finllayr = Dense(1, activation='sigmoid', name='finl', kernel_regularizer=regularizers.l2(l2_param), activity_regularizer=regularizers.l1(l1_param))(z)
 
     # ------------------------------------------------------------------------------
     modlfinl = Model(inputs=[localinput, globalinput], outputs=[finllayr])

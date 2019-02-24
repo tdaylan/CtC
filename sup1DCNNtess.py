@@ -21,7 +21,7 @@ import seaborn as sns
 
 import lightkurve
 
-from exopmain import retr_datamock, retr_datatess 
+from exop.main import retr_datamock, retr_datatess 
 
 from models import exonet, reduced
 
@@ -51,16 +51,20 @@ class cd:
 # TRAINING
 fractest = 0.3
 
-numbepoc = 20
+numbepoc = 200
 indxepoc = np.arange(numbepoc)
 
 datatype = 'tess'
 
 modl = reduced
 
-overwrite = False
+overwrite = True
 
+l1_param = 0.1
+l2_param = 0.1
 
+loclsize = 200
+globsize = 2000
 # -----------------------------------------------------------------------------------
 
 # FOR PRECISION AND RECALL
@@ -100,7 +104,7 @@ def takeClosest(myList, myNumber):
        return before
 
 # locl and glob binning
-def gen_binned(fluxes, phases, loclinptbins=200, globinptbins=2000, save=True):
+def gen_binned(fluxes, phases, loclinptbins=loclsize, globinptbins=globsize, save=True):
     
     pathsave = os.environ['EXOP_DATA_PATH'] + '/tess/locl_v_glob.pickle'
 
@@ -112,25 +116,38 @@ def gen_binned(fluxes, phases, loclinptbins=200, globinptbins=2000, save=True):
         # holder np arrays
         inptloclfold = np.empty((numbdata, loclinptbins))
         inptglobfold = np.empty((numbdata, globinptbins))
+        
+        xfoldlocl = np.empty((numbdata, loclinptbins))
+        xfoldglob = np.empty((numbdata, globinptbins))
 
         # let our runner know what is happening :)
         print("\nGenerating binned")
 
+
         # for each curve in the inpt space
         for k in trange(numbdata):
-
+            
+            # assert((phases[k] == np.sort(phases[k])).all())
+            
             newZero = takeClosest(phases[k],0)
             midpoint = np.where(phases[k] == newZero)[0][0]
             
             indices = range(int(midpoint-loclinptbins/2),int(midpoint+loclinptbins/2))
 
+            # POTENTIALLY DEALING WITH UNBINNED LIGHT CURVES
 
             inptloclfold[k,:] = fluxes[k].take(indices)
             # print(fluxes[k][::int(fluxes[k]/globinptbins)][:globinptbins])
             inptglobfold[k,:] = fluxes[k][::int(len(fluxes[k])/globinptbins)][:globinptbins]
 
+            xfoldlocl[k,:] = phases[k].take(indices)
+            xfoldglob[k,:] = phases[k][::int(len(fluxes[k])/globinptbins)][:globinptbins]
 
-        listdata = [inptloclfold, inptglobfold]
+            if k < 10:
+                print("Where values are NaNs:", np.where(np.isnan(fluxes[k].take(indices))))
+
+
+        listdata = [inptloclfold, inptglobfold, xfoldlocl, xfoldglob]
 
         print ('Writing to %s...' % pathsave)
         objtfile = open(pathsave, 'wb')
@@ -152,7 +169,7 @@ def gen_binned(fluxes, phases, loclinptbins=200, globinptbins=2000, save=True):
 
 
 # graphs inputs, and transformed inputs
-def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True):
+def inpt_before_train(locl, glob, loclx, globx, legd, labl, num_graphs=10, save=True, overwrite=True):
     """
     Takes the binned data from gen_binned and makes input graphs
     Shows both the local and global view
@@ -185,25 +202,27 @@ def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True
         else:
             textbox = 'Irrelevant'
 
+        textbox += '_{}'.format(legd[k])
+
         # line for local, line for global [line is used liberally, just a collection of x and y points]
         # k indexes in for a SINGLE light curve
-        localline = (np.arange(len(locl[k,:])), locl[k, :])
-        globalline = (np.arange(len(glob[k,:])), glob[k, :])
+        localline = (loclx[k], locl[k, :])
+        globalline = (globx[k], glob[k, :])
 
         # make the 2 subplots
         fig, axis = plt.subplots(2, 1, constrained_layout=True, figsize=(12,6))
 
         # plot 0 is the local plot, plot 1 is the global
-        axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr)
-        axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr)
+        axis[0].plot(localline[0], localline[1], marker='o', alpha=0.6, color=colr, ls='', markersize=3)
+        axis[1].plot(globalline[0], globalline[1], marker='o', alpha=0.6, color=colr, ls='', markersize=3)
         
         axis[0].set_title('Local ' + textbox)
         axis[1].set_title('Global ' + textbox)
 
-        axis[0].set_xlabel('Timebins Index')
+        axis[0].set_xlabel('Phase')
         axis[0].set_ylabel('Binned Flux')
 
-        axis[1].set_xlabel('Timebins Index')
+        axis[1].set_xlabel('Phase')
         axis[1].set_ylabel('Binned Flux')
 
 
@@ -211,7 +230,7 @@ def inpt_before_train(locl, glob, labl, num_graphs=10, save=True, overwrite=True
 
         if save:
             with cd(os.environ['EXOP_DATA_PATH'] + '/tess/plot/inptlabl/'):
-                print ('Writing to %s...' % textbox+ '_{}'.format(k))
+                print ('Writing to %s...' % textbox+ ', {}'.format(k))
             
                 plt.savefig(textbox+ '_{}'.format(k))
         
@@ -245,119 +264,124 @@ def train_2inpt_model(model, epochs, locl, glob, labls, callbacks_list, init_epo
 
 
 # WILL NEED TO INCLUDE HYPERPARAMETERS HERE TO DIFFERENTIATE MATRICES
-pathsavematr = 'tess/matr/' + '{}'.format(str(modl.__name__)) + '.npy'
+# also include the [EXOP_] path here!!!
+pathsavematr = os.environ['EXOP_DATA_PATH'] + '/tess/matr/' + '{}'.format(str(modl.__name__)) + '.pickle'
 
 
 
 def matr_2inpt(model, locl, glob, labls, modl):
     
-    numbdatatest = int(fractest * len(locl))
-
-
-    # separate the training from the testing
-    inpttestL = locl[:numbdatatest, :]
-    inpttranL = locl[numbdatatest:, :]
-
-    inpttestG = glob[:numbdatatest, :]
-    inpttranG = glob[numbdatatest:, :]
-
-    outptest = labls[:numbdatatest]
-    outptran = labls[numbdatatest:]
-
-
-    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(modl.__name__))) if os.path.isfile(name)])
-    indxepoc = np.arange(numbepoc)
-
-
-    # initialize the matrix holding all metric values
-    # INDEX 1: which epoch
-    # INDEX 2: which threshold value is being tested against
-    # INDEX 3: [IN THIS ORDER] precision, accuracy, recall (numerical values)
-    # INDEX 4: train [0] test [1]
-    metr = np.zeros((numbepoc, len(thresh), 3, 2)) - 1
-
-    # we also want the confusion matrices for later use
-    # INDEX 1: which epoch
-    # INDEX 2: which threshold value is being tested against
-    # INDEX 3: [IN THIS ORDER] trne, flpo, flne, trpo
-    # INDEX 4: train [0] test [1]
-    conf_matr_vals = np.zeros((numbepoc, len(thresh), 4, 2))
-
-
-    for epoc in tqdm(indxepoc):
-
-        # train and then test 
-        for i in trange(2):
-            # i == 0 -> train
-            # i == 1 -> test
-
-            if i == 0:
-                inptL = inpttranL
-                inptG = inpttranG
-                outp = outptran
-                
-                inptL = inptL[:, :, None]
-                inptG = inptG[:, :, None]
-
-                print('train')
-
-                
-            else:
-                inptL = inpttestL
-                inptG = inpttestG
-                outp = outptest
-                
-                inptL = inptL[:, :, None]
-                inptG = inptG[:, :, None]
-
-                print('test')
-
-
-            # only now, within the testing parameters, we test against a range of threshold values
-            for threshold in trange(len(thresh)):
-
-                outppred = (model.predict([inptL, inptG]) > thresh[threshold]).astype(int)
-
-                matrconf = confusion_matrix(outp, outppred)
-
-                if matrconf.size == 1:
-                    matrconftemp = np.copy(matrconf)
-                    matrconf = np.empty((2,2))
-                    matrconf[0,0] = matrconftemp
-
-                trne = matrconf[0,0]
-                flpo = matrconf[0,1]
-                flne = matrconf[1,0]
-                trpo = matrconf[1,1]
-                
-                # update conf matrix holder
-                conf_matr_vals[epoc, threshold, 0] = trne
-                conf_matr_vals[epoc, threshold, 1] = flpo
-                conf_matr_vals[epoc, threshold, 2] = flne
-                conf_matr_vals[epoc, threshold, 3] = trpo
-
-
-                # update metr with only viable data (test for positive values)
-                if float(trpo + flpo) > 0:
-                    metr[epoc, threshold, 0] = trpo / float(trpo + flpo) # precision
-                else:
-                    pass
-
-                if float(trpo+flpo+trne) != 0:
-                    metr[epoc, threshold, 1] = float(trpo + trne)/(trpo + flpo + trne) # accuracy
-                else:
-                    pass
-
-                if float(trpo + flne) > 0:
-                    metr[epoc, threshold, 2] = trpo / float(trpo + flne) # recall
-                else:
-                    pass 
-
-
-    listdata = [metr, conf_matr_vals]
-
 
     if not os.path.exists(pathsavematr) or overwrite:
+        #implement a lot of printing in this
+
+        numbdatatest = int(fractest * len(locl))
+
+
+        # separate the training from the testing
+        inpttestL = locl[:numbdatatest, :]
+        inpttranL = locl[numbdatatest:, :]
+
+        inpttestG = glob[:numbdatatest, :]
+        inpttranG = glob[numbdatatest:, :]
+
+        outptest = labls[:numbdatatest]
+        outptran = labls[numbdatatest:]
+
+
+        numbepoc = len(os.listdir(os.environ['EXOP_DATA_PATH']+'/tess/models/{}/'.format(str(modl.__name__))))
+        indxepoc = np.arange(numbepoc)
+
+
+        # initialize the matrix holding all metric values
+        # INDEX 1: which epoch
+        # INDEX 2: which threshold value is being tested against
+        # INDEX 3: [IN THIS ORDER] precision, accuracy, recall (numerical values)
+        # INDEX 4: train [0] test [1]
+        metr = np.zeros((numbepoc, len(thresh), 3, 2)) - 1
+
+        # we also want the confusion matrices for later use
+        # INDEX 1: which epoch
+        # INDEX 2: which threshold value is being tested against
+        # INDEX 3: [IN THIS ORDER] trne, flpo, flne, trpo
+        # INDEX 4: train [0] test [1]
+        conf_matr_vals = np.zeros((numbepoc, len(thresh), 4, 2))
+
+
+        for epoc in tqdm(indxepoc):
+
+            # train and then test 
+            for i in range(2):
+                # i == 0 -> train
+                # i == 1 -> test
+
+                if i == 0:
+                    inptL = inpttranL
+                    inptG = inpttranG
+                    outp = outptran
+                    
+                    inptL = inptL[:, :, None]
+                    inptG = inptG[:, :, None]
+
+                    
+
+                    
+                else:
+                    inptL = inpttestL
+                    inptG = inpttestG
+                    outp = outptest
+                    
+                    inptL = inptL[:, :, None]
+                    inptG = inptG[:, :, None]
+
+                    
+
+
+                    # only now, within the testing parameters, we test against a range of threshold values
+                    for threshold in range(len(thresh)):
+
+                        outppred = (model.predict([inptL, inptG]) > thresh[threshold]).astype(int)
+
+                        matrconf = confusion_matrix(outp, outppred)
+
+                        if matrconf.size == 1:
+                            matrconftemp = np.copy(matrconf)
+                            matrconf = np.empty((2,2))
+                            matrconf[0,0] = matrconftemp
+
+                        trne = matrconf[0,0]
+                        flpo = matrconf[0,1]
+                        flne = matrconf[1,0]
+                        trpo = matrconf[1,1]
+                        
+                        # update conf matrix holder
+                        conf_matr_vals[epoc, threshold, 0, i] = trne
+                        conf_matr_vals[epoc, threshold, 1, i] = flpo
+                        conf_matr_vals[epoc, threshold, 2, i] = flne
+                        conf_matr_vals[epoc, threshold, 3, i] = trpo
+
+
+                        # update metr with only viable data (test for positive values)
+                        if float(trpo + flpo) > 0:
+                            metr[epoc, threshold, 0, i] = trpo / float(trpo + flpo) # precision
+                        else:
+                            pass
+
+                        if float(trpo+flpo+trne) != 0:
+                            metr[epoc, threshold, 1, i] = float(trpo + trne)/(trpo + flpo + trne) # accuracy
+                        else:
+                            pass
+
+                        if float(trpo + flne) > 0:
+                            metr[epoc, threshold, 2, i] = trpo / float(trpo + flne) # recall
+                        else:
+                            pass 
+
+
+        listdata = [metr, conf_matr_vals]
+
+
+    
         print ('Writing to %s...' % pathsavematr)
         objtfile = open(pathsavematr, 'wb')
         pickle.dump(listdata, objtfile, protocol=pickle.HIGHEST_PROTOCOL)
@@ -399,7 +423,7 @@ def graph_PvR(model, locl, glob, labl, metr, modl):
 
     textbox = '\n'.join((
         # r'$\mathrm{Signal:Noise}=%.2f$' % (dept/nois, ),
-        # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
+        r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
         r'$\mathrm{AUC}=%.8f$' % (auc, ))) # ,
         # r'$\mathrm{Depth}=%.4f$' % (dept, )))
     
@@ -410,7 +434,7 @@ def graph_PvR(model, locl, glob, labl, metr, modl):
     fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
 
 
-    numbepoc = len([name for name in os.listdir('tess/models/{}/'.format(str(modl.__name__))) if os.path.isfile(name)])
+    numbepoc = len(os.listdir('tess/models/{}/'.format(str(modl.__name__))))
     indxepoc = np.arange(numbepoc)
 
 
@@ -428,9 +452,9 @@ def graph_PvR(model, locl, glob, labl, metr, modl):
 
             print("Epoch: {0}, ".format(epoc) + typstr) 
 
-            for threshold in trange(len(thresh)):
+            for threshold in range(len(thresh)):
                 # this is wrong ***
-                x, y = metr[epoc, threshold, i, 2], metr[epoc, threshold, i, 0]
+                x, y = metr[epoc, threshold, 2, i], metr[epoc, threshold, 0, i]
 
                 if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
                     x_points.append(x) # recall
@@ -464,25 +488,41 @@ def graph_conf(model, locl, glob, labl, conf):
 
     fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
 
+    numbepoc = len(os.listdir('tess/models/{}/'.format(str(modl.__name__))))
+    indxepoc = np.arange(numbepoc)
+
     print("Graphing inpt based on conf_matr") 
     
-    shape = 'v'
+    shape1 = 'v'
+    shape2 = '.'
 
     # constant threshold needed to get just one set of values\ unneeded?
-    const_thresh = 0.7
+    const_thresh = 70
 
-    for epoch in trange(len(conf)):
+    for epoch in tqdm(indxepoc):
 
-        trne = conf[epoch][0]
-        flpo = conf[epoch][1]
-        flne = conf[epoch][0]
-        trpo = conf[epoch][1]
+        trne = conf[epoch,const_thresh,0,1]
+        flpo = conf[epoch,const_thresh,1,1]
+        flne = conf[epoch,const_thresh,2,1]
+        trpo = conf[epoch,const_thresh,3,1]
 
         
-        axis[0,0].plot(epoch, trne, marker=shape, ls='', markersize=3, alpha=0.3, color='g')
-        axis[0,1].plot(epoch, flpo, marker=shape, ls='', markersize=3, alpha=0.3, color='r')
-        axis[1,0].plot(epoch, flne, marker=shape, ls='', markersize=3, alpha=0.3, color='#FFA500') # this is the color orange
-        axis[1,1].plot(epoch, trpo, marker=shape, ls='', markersize=3, alpha=0.3, color='b')
+        axis[0,0].plot(epoch, trne, marker=shape1, ls='', markersize=3, alpha=0.7, color='g')
+        axis[0,1].plot(epoch, flpo, marker=shape1, ls='', markersize=3, alpha=0.7, color='r')
+        axis[1,0].plot(epoch, flne, marker=shape1, ls='', markersize=3, alpha=0.7, color='#FFA500') # this is the color orange
+        axis[1,1].plot(epoch, trpo, marker=shape1, ls='', markersize=3, alpha=0.7, color='b')
+
+        
+        trne0 = conf[epoch,const_thresh,0,0]
+        flpo0 = conf[epoch,const_thresh,1,0]
+        flne0 = conf[epoch,const_thresh,2,0]
+        trpo0 = conf[epoch,const_thresh,3,0]
+
+        
+        axis[0,0].plot(epoch, trne0, marker=shape2, ls='', markersize=3, alpha=0.7, color='g')
+        axis[0,1].plot(epoch, flpo0, marker=shape2, ls='', markersize=3, alpha=0.7, color='r')
+        axis[1,0].plot(epoch, flne0, marker=shape2, ls='', markersize=3, alpha=0.7, color='#FFA500') # this is the color orange
+        axis[1,1].plot(epoch, trpo0, marker=shape2, ls='', markersize=3, alpha=0.7, color='b')
 
   
     axis[0,0].set_title('True Negative')
@@ -516,10 +556,10 @@ def main(run=True, graph=True):
     
     # data pull
 
-    phases, fluxes, labels, _, _, _ = retr_datatess(True, boolplot=False)
+    phases, fluxes, labels, legd, _, _ = retr_datatess(True, boolplot=False)
 
     # local and global
-    loclF, globF = gen_binned(fluxes, phases)
+    loclF, globF, loclPhas, globPhas = gen_binned(fluxes, phases)
 
 
     if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/'):
@@ -528,8 +568,8 @@ def main(run=True, graph=True):
     if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}'.format(modl.__name__)):
         os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}'.format(modl.__name__))
 
-    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/matr/{}'.format(modl.__name__)):
-        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/matr/{}'.format(modl.__name__))
+    if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/matr/'):
+        os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/matr/')
 
     if not os.path.exists(os.environ['EXOP_DATA_PATH'] + '/tess/plot/Conf/'):
         os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/plot/Conf/')
@@ -538,18 +578,23 @@ def main(run=True, graph=True):
         os.makedirs(os.environ['EXOP_DATA_PATH'] + '/tess/plot/PvR/')
 
     # load the most previous weights from last training (could make this its own function)
-    weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(modl.__name__))]
+    try:
+        weights_list = [weights for weights in os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(modl.__name__))]
     
 
-    if len(weights_list) > 0:
-        last_epoch = max(weights_list)
-    else:
+        if len(weights_list) > 0:
+            last_epoch = max(weights_list)
+        else:
+            last_epoch = 0
+    
+    except:
+        weights_list = []
         last_epoch = 0
 
     prevMax = 0
 
     # initialize model
-    model = modl()
+    model = modl(loclsize, globsize, l1_param, l2_param)
     
     # something here does not work, won't load prev model correctly :(
     try:
@@ -580,7 +625,7 @@ def main(run=True, graph=True):
         graph_PvR(model, loclF, globF, labels, metr, modl)
 
          # sample relevance graphs
-        inpt_before_train(loclF, globF, labels, save=False)
+        # inpt_before_train(loclF, globF, loclPhas, globPhas, legd, labels, save=False)
     
 
 
@@ -588,4 +633,47 @@ def main(run=True, graph=True):
 
 
 if __name__ == "__main__":
-    main()
+    main(run=True, graph=True)
+
+
+
+
+
+"""
+
+LOCLGLOBL GRAPHS
+
+    check for indexing error or if NaN values are coming up as zeros
+
+    !!!!! why are there zero values !!!!!
+
+
+    deliniate region scoped in the local view onto the graph of the global
+        with dashed lines
+        have the points in the global (that are zoomed into for the local) as green
+        have the entire local view as green
+        
+
+    increase local binning size until full scope of transit is evident
+
+
+    can have localS (only if eclipsing binary, need to also be able to locate the EB...)
+        local around the Secondary
+        add another column to the graphs
+        so like form:
+                    loclP               loclS
+                              Globl
+    
+    and localP
+        local around the Primary
+
+GENBIN:
+    chew on zeros replaced with NaNs
+        masked arrays
+
+
+MODEL:
+    l1 l2
+
+    allow different model input sizes
+"""
