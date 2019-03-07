@@ -8,6 +8,7 @@ from keras.callbacks import ModelCheckpoint, TensorBoard
 
 import sklearn
 from sklearn.metrics import confusion_matrix, roc_auc_score
+from sklearn.model_selection import train_test_split
 
 import astropy as ap
 import astropy.io.fits as fits
@@ -51,7 +52,7 @@ class cd:
 # TRAINING
 fractest = 0.3
 
-numbepoc = 200
+numbepoc = 50
 indxepoc = np.arange(numbepoc)
 
 datatype = 'tess'
@@ -144,8 +145,8 @@ def gen_binned(fluxes, phases, loclinptbins=loclsize, globinptbins=globsize, sav
             xfoldglob[k,:] = phases[k][::int(len(fluxes[k])/globinptbins)][:globinptbins]
 
             if k < 10:
-                print("Where values are NaNs:", np.where(np.isnan(fluxes[k].take(indices))))
-
+                # print("Where values are NaNs:", np.where(np.isnan(fluxes[k].take(indices))))
+                pass
 
         listdata = [inptloclfold, inptglobfold, xfoldlocl, xfoldglob]
 
@@ -349,6 +350,9 @@ def matr_2inpt(model, locl, glob, labls, modl):
                             matrconf = np.empty((2,2))
                             matrconf[0,0] = matrconftemp
 
+                        if threshold == len(thresh) or threshold == 0 or threshold == len(thresh)/2:
+                            print('\nMatrconf: ', matrconf)
+
                         trne = matrconf[0,0]
                         flpo = matrconf[0,1]
                         flne = matrconf[1,0]
@@ -412,35 +416,39 @@ def graph_PvR(model, locl, glob, labl, metr, modl):
     outp = labl
 
     y_pred = model.predict([inptL, inptG])
-
+    print('model predict: ', y_pred)
     y_real = outp[:numbdatatest]
-
+    print('real vals: ', y_real)
     try:
         auc = roc_auc_score(y_real, y_pred)
     except:
         print('y_pred is bad :(')
         auc = 0.
 
-    textbox = '\n'.join((
+    textbox = r'$\mathrm{AUC}=%.8f$' % (auc, )
+        """'\n'.join((
         # r'$\mathrm{Signal:Noise}=%.2f$' % (dept/nois, ),
-        r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
+        # r'$\mathrm{Gaussian Standard Deviation}=%.2f$' % (auc, ),
+        'Properties',
         r'$\mathrm{AUC}=%.8f$' % (auc, ))) # ,
-        # r'$\mathrm{Depth}=%.4f$' % (dept, )))
+        # r'$\mathrm{Depth}=%.4f$' % (dept, )))"""
     
 
-    x_points = []
-    y_points = []
+
 
     fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
 
 
-    numbepoc = len(os.listdir('tess/models/{}/'.format(str(modl.__name__))))
+    numbepoc = len(os.listdir(os.environ['EXOP_DATA_PATH'] + 'tess/models/{}/'.format(str(modl.__name__))))
     indxepoc = np.arange(numbepoc)
 
 
     for epoc in tqdm(indxepoc):
         for i in range(2):
             
+            x_points = []
+            y_points = []
+
             if i == 0:
                 typstr = 'test'
                 colr = 'm'
@@ -450,16 +458,21 @@ def graph_PvR(model, locl, glob, labl, metr, modl):
                 colr = 'g'
 
 
-            print("Epoch: {0}, ".format(epoc) + typstr) 
+            # print("Epoch: {0}, ".format(epoc) + typstr) 
+
 
             for threshold in range(len(thresh)):
-                # this is wrong ***
+                
                 x, y = metr[epoc, threshold, 2, i], metr[epoc, threshold, 0, i]
 
-                if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
-                    x_points.append(x) # recall
-                    y_points.append(y) # precision
-                    axis.plot(x, y, marker='o', ls='', markersize=3, alpha=0.6, color=colr)
+                if threshold > len(thresh)/1.1:
+                    print('\nx: ', x, '\ny: ', y)
+                
+                # if not np.isnan(x) and x != 0 and not np.isnan(y) and y != 0:
+                x_points.append(x) # recall
+                y_points.append(y) # precision
+                    
+            axis.plot(x_points, y_points, marker='o', ls='', markersize=3, alpha=0.6, color=colr)
 
 
     
@@ -488,18 +501,18 @@ def graph_conf(model, locl, glob, labl, conf):
 
     fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
 
-    numbepoc = len(os.listdir('tess/models/{}/'.format(str(modl.__name__))))
+    numbepoc = len(os.listdir(os.environ['EXOP_DATA_PATH'] + 'tess/models/{}/'.format(str(modl.__name__))))
     indxepoc = np.arange(numbepoc)
 
     print("Graphing inpt based on conf_matr") 
     
     shape1 = 'v'
-    shape2 = '.'
 
     # constant threshold needed to get just one set of values\ unneeded?
     const_thresh = 70
 
     for epoch in tqdm(indxepoc):
+
 
         trne = conf[epoch,const_thresh,0,1]
         flpo = conf[epoch,const_thresh,1,1]
@@ -513,16 +526,6 @@ def graph_conf(model, locl, glob, labl, conf):
         axis[1,1].plot(epoch, trpo, marker=shape1, ls='', markersize=3, alpha=0.7, color='b')
 
         
-        trne0 = conf[epoch,const_thresh,0,0]
-        flpo0 = conf[epoch,const_thresh,1,0]
-        flne0 = conf[epoch,const_thresh,2,0]
-        trpo0 = conf[epoch,const_thresh,3,0]
-
-        
-        axis[0,0].plot(epoch, trne0, marker=shape2, ls='', markersize=3, alpha=0.7, color='g')
-        axis[0,1].plot(epoch, flpo0, marker=shape2, ls='', markersize=3, alpha=0.7, color='r')
-        axis[1,0].plot(epoch, flne0, marker=shape2, ls='', markersize=3, alpha=0.7, color='#FFA500') # this is the color orange
-        axis[1,1].plot(epoch, trpo0, marker=shape2, ls='', markersize=3, alpha=0.7, color='b')
 
   
     axis[0,0].set_title('True Negative')
@@ -609,8 +612,8 @@ def main(run=True, graph=True):
         print("Fresh, new model")
 
     
-    modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
-    checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
+    modlpath = os.environ['EXOP_DATA_PATH'] + 'tess/models/{}/'.format(str(modl.__name__)) + '-{epoch:03d}' + '.h5'
+    checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=False, mode='max')
     tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
     callbacks_list = [checkpoint, tens_board]  
 
@@ -618,14 +621,17 @@ def main(run=True, graph=True):
         # need a conditional to check the shape of the model -- if two-input: use this function
         train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list, init_epoch=prevMax)
 
-    metr, conf = matr_2inpt(model, loclF, globF, labels, modl)
-
+    
     if graph:
-        graph_conf(model, loclF, globF, labels, conf)
-        graph_PvR(model, loclF, globF, labels, metr, modl)
-
-         # sample relevance graphs
+        # sample relevance graphs
         inpt_before_train(loclF, globF, loclPhas, globPhas, legd, labels, save=False)
+
+        # metr, conf = matr_2inpt(model, loclF, globF, labels, modl)
+        # graph_conf(model, loclF, globF, labels, conf)
+        # graph_PvR(model, loclF, globF, labels, metr, modl)
+
+         
+        
     
 
 
@@ -652,9 +658,6 @@ LOCLGLOBL GRAPHS
         with dashed lines
         have the points in the global (that are zoomed into for the local) as green
         have the entire local view as green
-        
-
-    increase local binning size until full scope of transit is evident
 
 
     can have localS (only if eclipsing binary, need to also be able to locate the EB...)
@@ -670,10 +673,7 @@ LOCLGLOBL GRAPHS
 GENBIN:
     chew on zeros replaced with NaNs
         masked arrays
+        Look in keras options for NaNs
 
-
-MODEL:
-    l1 l2
-
-    allow different model input sizes
+NO MORE SAVE WEIGHTS --> SAVE MODEL WHOLE (WE ARE LOSING METADATA)
 """
