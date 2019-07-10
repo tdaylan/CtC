@@ -434,7 +434,7 @@ def graph_PvR(model, locl, glob, labl, metr, modl):
     fig, axis = plt.subplots(constrained_layout=True, figsize=(12,6))
 
 
-    numbepoc = len(os.listdir('tess/models/{}/'.format(str(modl.__name__))))
+    numbepoc = len(os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(str(modl.__name__))))
     indxepoc = np.arange(numbepoc)
 
 
@@ -488,7 +488,7 @@ def graph_conf(model, locl, glob, labl, conf):
 
     fig, axis = plt.subplots(2, 2, constrained_layout=True, figsize=(12,6))
 
-    numbepoc = len(os.listdir('tess/models/{}/'.format(str(modl.__name__))))
+    numbepoc = len(os.listdir(os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(str(modl.__name__))))
     indxepoc = np.arange(numbepoc)
 
     print("Graphing inpt based on conf_matr") 
@@ -609,7 +609,7 @@ def main(run=True, graph=True):
         print("Fresh, new model")
 
     
-    modlpath = 'tess/models/{}/'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
+    modlpath = os.environ['EXOP_DATA_PATH'] + '/tess/models/{}/'.format(str(modl.__name__)) + 'weights-{epoch:02d}' + '.h5'
     checkpoint = ModelCheckpoint(modlpath, monitor='val_acc', verbose=1, save_best_only=False, save_weights_only=True, mode='max')
     tens_board = TensorBoard(log_dir='logs/{}/{}'.format(modl.__name__,time.time()))
     callbacks_list = [checkpoint, tens_board]  
@@ -618,22 +618,23 @@ def main(run=True, graph=True):
         # need a conditional to check the shape of the model -- if two-input: use this function
         train_2inpt_model(model, numbepoc, loclF, globF, labels, callbacks_list, init_epoch=prevMax)
 
+    if graph:
+         # sample relevance graphs
+        inpt_before_train(loclF, globF, loclPhas, globPhas, legd, labels, save=False)
+    
     metr, conf = matr_2inpt(model, loclF, globF, labels, modl)
 
     if graph:
         graph_conf(model, loclF, globF, labels, conf)
         graph_PvR(model, loclF, globF, labels, metr, modl)
 
-         # sample relevance graphs
-        inpt_before_train(loclF, globF, loclPhas, globPhas, legd, labels, save=False)
-    
 
 
 # -----------------------------------------------------------------------------------
 
 
 if __name__ == "__main__":
-    main(run=True, graph=True)
+    main(run=False, graph=True)
 
 
 

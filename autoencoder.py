@@ -239,16 +239,15 @@ if __name__ == "__main__":
 
 	usetess = True
 
-
 	if usetess:
-		_, light_curve, labels, _, _,_ = exopmain.retr_datatess(True)
+		_, light_curves, labels, _, _,_ = exopmain.retr_datatess(True)
 	else:
 		light_curves, labels = exopmain.retr_datamock(numbplan=100, numbnois=100, dept = dept, nois = nois)
 
-	plt.figure()
-	for i in range(0,5):
-		plt.plot(range(0, len(light_curves[i])), light_curves[i])
-	plt.show()
+	#plt.figure()
+	#for i in range(0,5):
+	#	plt.plot(range(0, len(light_curves[i])), light_curves[i])
+	#plt.show()
 	nrow, ncol = light_curves.shape
 	light_curves = np.reshape(light_curves, (nrow, ncol, 1))
 	colors =  ["red" if x else "blue" for x in labels] #planet transits are red; others are blue

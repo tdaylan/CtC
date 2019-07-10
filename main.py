@@ -30,19 +30,6 @@ class gdatstrt(object):
         pass
     
 
-def summgene(varb):
-    '''
-    convenience function to quickly print a numpy array
-    '''
-    try:
-        print (np.amin(varb))
-        print (np.amax(varb))
-        print (np.mean(varb))
-        print (varb.shape)
-    except:
-        print varb
-
-
 def appdfcon(gdat):
     
     if gdat.numblayr == 1:
@@ -80,17 +67,9 @@ def retr_metr(gdat, indxvaluthis=None, strgvarbthis=None):
     metr = np.zeros((gdat.numbepoc, 2, 3 )) - 1
 
     loss = np.empty(gdat.numbepoc)
-    numbepocchec = 5 # hard coded
+    numbepocchec = 5
     
-    print(gdat.modl.summary())
-    print 'gdat.inpttran'
-    summgene(gdat.inpttran)
-    print 'gdat.outptran'
-    summgene(gdat.outptran)
-    print 'gdat.inpttest'
-    summgene(gdat.inpttest)
-    print 'gdat.outptest'
-    summgene(gdat.outptest)
+    print gdat.modl.summary()
     for y in gdat.indxepoc:
         print 'Training epoch %d...' % y
         histinpt = gdat.inpttran[:, :, None]
@@ -122,8 +101,8 @@ def retr_metr(gdat, indxvaluthis=None, strgvarbthis=None):
 
 
         if y == gdat.numbepoc - 1 and 100. * (loss[indxepocloww] - loss[y]):
-            print('Warning! The optimizer may not have converged.')
-            print('loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss)
+            print 'Warning! The optimizer may not have converged.'
+            print 'loss[indxepocloww]\n', loss[indxepocloww], '\nloss[y]\n', loss[y], '\nloss\n', loss
 
         for r in gdat.indxrtyp:
             if r == 0:
@@ -148,17 +127,6 @@ def retr_metr(gdat, indxvaluthis=None, strgvarbthis=None):
             flne = matrconf[1, 0]
             trpo = matrconf[1, 1]
             
-            print 'r'
-            print r
-            print 'outppred'
-            summgene(outppred)
-            print 'outppredsigm[where(outp == 0)]'
-            summgene(outppredsigm[np.where(outp == 0)])
-            print 'outppredsigm[where(outp == 1)]'
-            summgene(outppredsigm[np.where(outp == 1)])
-            print 'matrconf'
-            print matrconf
-
             if float(trpo + flpo) > 0:
                 metr[y, r, 0] = trpo / float(trpo + flpo) # precision
             else:
@@ -351,9 +319,9 @@ def expl( \
                     setattr(gdat, strgvarb, gdat.listvalu[strgvarb][i])
                     
                     if isinstance(gdat.listvalu[strgvarb][i], str):
-                        print('Value: ' + gdat.listvalu[strgvarb][i])
+                        print 'Value: ' + gdat.listvalu[strgvarb][i]
                     else:
-                        print('Value: %g' % gdat.listvalu[strgvarb][i])
+                        print 'Value: %g' % gdat.listvalu[strgvarb][i]
                     
                     for strgvarbtemp in gdat.liststrgvarb: 
                         print (strgvarbtemp)
